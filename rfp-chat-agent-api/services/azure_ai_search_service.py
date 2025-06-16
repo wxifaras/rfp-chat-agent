@@ -1,5 +1,5 @@
 import uuid
-from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, AzureOpenAIVectorizer, AzureOpenAIVectorizerParameters, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField
+from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential 
 from azure.search.documents import SearchClient
@@ -75,15 +75,22 @@ class AzureAISearchService:
         ]
 
         vector_search = VectorSearch(
-            algorithms=[ HnswAlgorithmConfiguration(name="rpf-vector-config", kind="hnsw",
-                                                    parameters={"m":4, "efConstruction":400}) ],
+            algorithms=[ HnswAlgorithmConfiguration(name="rpf-vector-config", kind="hnsw", parameters={"m":4, "efConstruction":400}) ],
             profiles=[ VectorSearchProfile(name="rpf-vector-config", algorithm_configuration_name="rpf-vector-config") ]
         )
 
+        semantic_config = SemanticConfiguration(
+            name="semantic-config",
+            prioritized_fields=SemanticPrioritizedFields(
+                content_fields=[SemanticField(field_name="chunk_content")],
+                title_field=SemanticField(field_name="pursuit_name")
+            )
+        )
         idx = SearchIndex(
             name=settings.AZURE_AI_SEARCH_INDEX_NAME,
             fields=fields,
-            vector_search=vector_search
+            vector_search=vector_search,
+            semantic_search=SemanticSearch(configurations=[semantic_config])
         )
 
         result = self.search_index_client.create_or_update_index(idx)
