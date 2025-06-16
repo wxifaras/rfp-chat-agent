@@ -10,7 +10,6 @@ from pathlib import Path
 from core.settings import settings
 import uuid
 import logging
-import json
 import tiktoken
 import time
 
@@ -106,7 +105,8 @@ class RfpService:
         llm_response = AzureOpenAIService().get_rfp_decision_log(final_rfp)
         logger.info(f"LLM Response: {llm_response}")
 
-        llm_response_dict = json.loads(llm_response)
+        llm_response_dict = llm_response.model_dump()
+
         # Merge decision log and LLM response and use that as metadata
         merged = {**llm_response_dict, **{k: v for k, v in decision_log_dict.items() if v not in (None, "")}}     
         merged["rfp_id"] = rfp_id
@@ -132,9 +132,12 @@ class RfpService:
 
         logger.info(f"Indexed {len(indexing_result)} chunks for Pursuit: {pursuit_name}")
 
+        # validate and use the DecisionLog model in the repsonse
+        final_decision_log = DecisionLog.model_validate(merged)
+
         process_rfp_response = ProcessRfpResponse(
             Pursuit_Name=pursuit_name,
-            Decision_Log=merged
+            Decision_Log=final_decision_log
         )
 
         return process_rfp_response
