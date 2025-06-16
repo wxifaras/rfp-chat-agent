@@ -1,0 +1,31 @@
+from pydantic import BaseModel
+
+class DecisionLog(BaseModel):
+    Pursuit_Name: str
+    Decision_by_CDD: str
+    Details: str
+    Est_TCV: str
+    Division: str
+    Pursuit_Sponsor: str
+    CDD_Booking_Date: str
+    Link_to_pursuit_files: str
+    Associated_files: str
+    Resources_Required: str
+    Contract_Term: str
+    Pursuit_Due_Date: str
+    Has_the_Opportunity_Review_Policy_been_reviewed: str
+    Client_Ministry_Name: str
+    Sign_off_status: str
+    Next_Step: str
+    Partner_Required: str
+    I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers: str
+    Deal_type_current: str
+    Expected_Gross_Margin: str
+    Does_Maximus_Canada_have_the_qualifications: str
+    Conditions: str
+    Pursuit_Lead: str
+    Salesforce_Opportunity_URL: str
+    Modified: str
+    Created: str
+    Created_By: str
+    Modified_By: str
