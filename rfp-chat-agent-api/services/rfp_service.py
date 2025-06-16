@@ -57,14 +57,9 @@ class RfpService:
         """
         
         rfp_id = str(uuid.uuid4())
-        """if not data:
-            decision_log_dict = {}
-        else:
-            decision_log = DecisionLog.model_validate_json(data)
-            decision_log_dict = decision_log.model_dump()"""
-
         decision_log_dict = {}
-        try:
+        
+            try:
             decision_log_data = json.loads(data)
             decision_log_dict = DecisionLog(**decision_log_data).model_dump(exclude_none=True)
         except Exception as e:
