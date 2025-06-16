@@ -2,6 +2,8 @@ from openai import AzureOpenAI
 from prompts.core_prompts import RFP_INGESTION_SYSTEM_PROMPT
 from prompts.core_prompts import SYSTEM_PROMPT
 from core.settings import settings
+from models.decision_log import DecisionLog
+import json
 
 class AzureOpenAIService:
     def __init__(self):
@@ -26,16 +28,17 @@ class AzureOpenAIService:
             self, 
             rfp_content: str
         ):
-        
-        response = self.client.chat.completions.create(
+
+        response = self.client.beta.chat.completions.parse(
             model=self.deployment_name,
             messages=[
                 {"role": "system", "content": RFP_INGESTION_SYSTEM_PROMPT},
                 {"role": "user", "content": rfp_content}
-            ]
+            ],
+            response_format=DecisionLog
         )
 
-        message_content = response.choices[0].message.content.strip()
+        message_content = response.choices[0].message.parsed
         return message_content
     
     def create_embedding(
