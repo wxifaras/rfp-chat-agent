@@ -3,7 +3,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import ValidationError
 from typing import Dict, Any, Optional
 from services.rfp_service import RfpService
-from models.decision_log import DecisionLog
+from models.process_rfp_response import ProcessRfpResponse
 import logging
 
 router = APIRouter()
@@ -29,7 +29,7 @@ logger.addHandler(ch)
 async def chat_with_rfp():
     return {"message": "Hello World"}
 
-@router.post("/rfp/upload", response_model=DecisionLog)
+@router.post("/rfp/upload", response_model=ProcessRfpResponse)
 async def upload_rfp(
     pursuit_name: Annotated[str, Form(...)] ,
     files: Annotated[list[UploadFile], File(...)],
