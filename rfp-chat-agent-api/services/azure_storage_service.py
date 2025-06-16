@@ -1,6 +1,25 @@
 from azure.storage.blob import BlobServiceClient, BlobSasPermissions, generate_blob_sas
+from azure.core.exceptions import ResourceNotFoundError
 from core.settings import settings
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOG_LEVEL)
+
+# Console handler (prints to terminal)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+
+# Formatter
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
+ch.setFormatter(formatter)
+
+# Add handler
+logger.addHandler(ch)
 
 class AzureStorageService:
     def __init__(self):
@@ -122,3 +141,14 @@ class AzureStorageService:
             if part.startswith("AccountKey="):
                 return part.split("=", 1)[1]
         raise ValueError("AccountKey not found in connection string.")
+    
+    def get_capabilities(self) -> str:
+        blob_path = "capabilities/capabilities.txt"
+        blob_client = self.container_client.get_blob_client(blob_path)
+
+        try:
+            data = blob_client.download_blob().readall()
+            return data.decode("utf-8")
+        except ResourceNotFoundError:
+            logger.info(f"Blob '{blob_path}' not found; returning empty string.")
+            return ""

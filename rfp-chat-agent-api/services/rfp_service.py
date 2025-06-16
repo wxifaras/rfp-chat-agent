@@ -139,34 +139,33 @@ class RfpService:
 
         return process_rfp_response
     
-    async def process_capabilities(self, files: List[UploadFile] = File(...)):
-        final_capabilities = []
+    async def process_capabilities(self, files: list[UploadFile] = File(...)):
+        new_parts = []
+        existing_capabilities = AzureStorageService().get_capabilities() or ""
+        logger.info(f"Loaded existing capabilities: {existing_capabilities[:100]}...")
+
         for file in files:
-            file_content = await file.read()
-        
-            blob_path = AzureStorageService().upload_file(
-                "capabilities",
-                file_content,
-                file.filename
-            )
+            content_bytes = await file.read()
+            AzureStorageService().upload_file("capabilities", content_bytes, file.filename)
+            logger.info(f"Uploaded raw file '{file.filename}' to blob storage.")
 
-            logger.info(f"Uploaded '{blob_path}'.")
-
-            sas_url = AzureStorageService().generate_blob_sas_url(blob_path)
+            sas_url = AzureStorageService().generate_blob_sas_url(f"capabilities/{file.filename}")
             logger.info(f"SAS URL: {sas_url}")
-            time.sleep(5)  # Sleep to ensure SAS URL is generated correctly
-            content = AzureDocIntelService().extract_text_from_url(sas_url)
-            logger.info(f"Extracted content: {content[:100]}...")  # Print first 100 characters for brevity
-            final_capabilities.append(content)
+            time.sleep(5)  # wait for blob propagation (if needed)
 
-        final_capabilities_text = "\n".join(final_capabilities)
+            extracted = AzureDocIntelService().extract_text_from_url(sas_url)
+            logger.info(f"Extracted content (first 100 chars): {extracted[:100]}...")
+            new_parts.append(extracted)
+
+        combined_text = "\n".join(filter(None, [existing_capabilities] + new_parts))
+
         blob_path = AzureStorageService().upload_file(
             "capabilities",
-            final_capabilities_text,
-            "capabilities.txt",
+            combined_text,
+            "capabilities.txt"
         )
 
-        logger.info(f"Final capabilities uploaded to '{blob_path}'.")
+        logger.info(f"Updated capabilities blob uploaded at '{blob_path}'.")
         
     @staticmethod
     def chunk_text(text):
