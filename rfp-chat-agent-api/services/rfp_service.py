@@ -49,10 +49,10 @@ class RfpService:
             Process an uploaded RFP end-to-end.
 
             - Extract plain text from the uploaded RFP using Azure Document Intelligence.
-            - Use an LLM to extract structured metadata from the RFP content.
+            - Use the LLM to extract structured metadata from the RFP content.
             - Persist the original file, extracted text, and metadata in Azure Blob Storage.
             - Ensure the Azure AI Search index exists; create it if not present.
-            - Chunk the RFP text, generate embeddings, and upload them to the hybrid AI Search index.
+            - Chunk the RFP text, generate embeddings, and upload them to theAI Search index.
             - Return the merged metadata for further use.
         """
         

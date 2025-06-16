@@ -1,4 +1,5 @@
 fastapi[standard]
+pydantic-settings
 python-multipart
 azure-storage-blob
 azure-ai-documentintelligence
