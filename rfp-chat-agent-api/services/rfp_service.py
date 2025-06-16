@@ -139,6 +139,35 @@ class RfpService:
 
         return process_rfp_response
     
+    async def process_capabilities(self, files: List[UploadFile] = File(...)):
+        final_capabilities = []
+        for file in files:
+            file_content = await file.read()
+        
+            blob_path = AzureStorageService().upload_file(
+                "capabilities",
+                file_content,
+                file.filename
+            )
+
+            logger.info(f"Uploaded '{blob_path}'.")
+
+            sas_url = AzureStorageService().generate_blob_sas_url(blob_path)
+            logger.info(f"SAS URL: {sas_url}")
+            time.sleep(5)  # Sleep to ensure SAS URL is generated correctly
+            content = AzureDocIntelService().extract_text_from_url(sas_url)
+            logger.info(f"Extracted content: {content[:100]}...")  # Print first 100 characters for brevity
+            final_capabilities.append(content)
+
+        final_capabilities_text = "\n".join(final_capabilities)
+        blob_path = AzureStorageService().upload_file(
+            "capabilities",
+            final_capabilities_text,
+            "capabilities.txt",
+        )
+
+        logger.info(f"Final capabilities uploaded to '{blob_path}'.")
+        
     @staticmethod
     def chunk_text(text):
         enc = tiktoken.get_encoding("o200k_base")

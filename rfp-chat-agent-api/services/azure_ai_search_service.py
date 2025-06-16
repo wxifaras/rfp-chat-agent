@@ -96,7 +96,7 @@ class AzureAISearchService:
         for chunk in chunks:
             embedding = AzureOpenAIService().create_embedding(chunk)
             chunk_id = str(uuid.uuid4())
-            logger.info(f"Generated embedding for pursuit: {pursuit_name}")
+            logger.info(f"Generated chunk ID: {chunk_id} for pursuit: {pursuit_name} Chunk content: {chunk[:50]}...")
             documents.append({
                 "chunk_id": chunk_id,
                 "rfp_id": rfp_id,

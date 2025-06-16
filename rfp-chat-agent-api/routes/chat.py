@@ -41,3 +41,12 @@ async def upload_rfp(
         logger.error(f"Validation error: {e}")
         return {"error": str(e)}
     return process_rfp_response
+
+@router.post("/capabilities/upload")
+async def upload_capabilities(files: Annotated[list[UploadFile], File(...)]):
+    try:
+        logger.info("Received capabilities upload request")
+        await RfpService().process_capabilities(files)
+    except Exception as e:
+        logger.error(f"Error processing capabilities upload: {e}")
+        return {"error": str(e)}

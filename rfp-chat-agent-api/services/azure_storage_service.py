@@ -52,6 +52,26 @@ class AzureStorageService:
 
         return blob_path
 
+    def upload_capabilities(
+        self,
+        folder_name: str,
+        content: bytes | str,
+        blob_name: str,
+    ) -> str:
+    
+        # Normalize the blob path
+        blob_path = f"{folder_name.rstrip('/')}/{blob_name.lstrip('/')}"
+
+        # Ensure content is bytes
+        if isinstance(content, str):
+            file_bytes = content.encode('utf-8')
+        else:
+            file_bytes = content
+
+        # Get a client and upload
+        blob_client = self.container_client.get_blob_client(blob_path)
+        blob_client.upload_blob(file_bytes, overwrite=True)
+        return blob_path
 
     def generate_blob_sas_url(self, blob_name: str) -> str:
         start_time = datetime.datetime.now(datetime.timezone.utc)
