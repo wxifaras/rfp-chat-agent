@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional
 from fastapi import File, Form, UploadFile
 from models.decision_log import DecisionLog
@@ -56,12 +57,20 @@ class RfpService:
         """
         
         rfp_id = str(uuid.uuid4())
-        if not data:
+        """if not data:
             decision_log_dict = {}
         else:
             decision_log = DecisionLog.model_validate_json(data)
-            decision_log_dict = decision_log.model_dump()
+            decision_log_dict = decision_log.model_dump()"""
 
+        decision_log_dict = {}
+        try:
+            decision_log_data = json.loads(data)
+            decision_log_dict = DecisionLog(**decision_log_data).model_dump(exclude_none=True)
+        except Exception as e:
+            logger.error(f"Error validating decision log data: {e}")
+            raise ValueError("Invalid decision log data provided")
+        
         rfp_parts = []
         for file in files:
             file_content = await file.read()
