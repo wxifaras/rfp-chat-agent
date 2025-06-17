@@ -77,10 +77,7 @@ class RfpService:
 
             if not uploaded:
                 logger.info(f"Blob '{blob_path}' already exists. RFP not uploaded or processed again.")
-                return ProcessRfpResponse(
-                    Pursuit_Name=pursuit_name,
-                    Decision_Log=decision_log_dict
-                )
+                continue
 
             logger.info(f"Uploaded '{blob_path}'.")
 
