@@ -52,22 +52,25 @@ class RfpService:
             - Use the LLM to extract structured metadata from the RFP content.
             - Persist the original file, extracted text, and metadata in Azure Blob Storage.
             - Ensure the Azure AI Search index exists; create it if not present.
-            - Chunk the RFP text, generate embeddings, and upload them to theAI Search index.
+            - Chunk the RFP text, generate embeddings, and upload them to the AI Search index.
             - Return the merged metadata for further use.
         """
         
         rfp_id = str(uuid.uuid4())
         decision_log_dict = {}
         
-        try:
-            decision_log_data = json.loads(data)
-            decision_log_dict = DecisionLog(**decision_log_data).model_dump(exclude_none=True)
-        except Exception as e:
-            logger.error(f"Error validating decision log data: {e}")
-            raise ValueError("Invalid decision log data provided")
+        # Parse decision log data if provided
+        if data:
+            try:
+                decision_log_data = json.loads(data)
+                decision_log_dict = DecisionLog(**decision_log_data).model_dump(exclude_none=True)
+            except Exception as e:
+                logger.error(f"Error validating decision log data: {e}")
+                raise ValueError("Invalid decision log data provided")
         
-        rfp_parts = []
-
+        new_rfp_parts = []  # Only new content for LLM processing and indexing
+        
+        # Process each uploaded file
         for file in files:
             file_content = await file.read()
             blob_path, uploaded = AzureStorageService().upload_file_with_dup_check(
@@ -77,40 +80,88 @@ class RfpService:
             )
 
             if not uploaded:
-                logger.info(f"Blob '{blob_path}' already exists. RFP not uploaded or processed again.")
+                logger.info(f"Blob '{blob_path}' already exists. Skipping processing.")
                 continue
 
             logger.info(f"Uploaded '{blob_path}'.")
 
+            # Extract text from the uploaded file
             sas_url = AzureStorageService().generate_blob_sas_url(blob_path)
             logger.info(f"SAS URL: {sas_url}")
             time.sleep(5)  # Sleep to ensure SAS URL is generated correctly
+            
             content = AzureDocIntelService().extract_text_from_url(sas_url)
-            logger.info(f"Extracted content: {content[:100]}...")  # Print first 100 characters for brevity
+            logger.info(f"Extracted content: {content[:100]}...")
 
+            # Save extracted text as .txt file
             p = Path(file.filename)
             blob_name_with_txt = p.with_suffix(".txt").name
-            blob_path= AzureStorageService().upload_file(
+            text_blob_path = AzureStorageService().upload_file(
                 pursuit_name,
                 content,
                 blob_name_with_txt
             )
 
-            logger.info(f"Uploaded text content to '{blob_path}'.")
+            logger.info(f"Uploaded text content to '{text_blob_path}'.")
+            
+            # Add only new content
+            new_rfp_parts.append(content)
 
-            rfp_parts.append(content)
+        # Check if we have any NEW content to process
+        if not new_rfp_parts:
+            logger.info("No new RFP content to process. All files were duplicates or no files provided.")
+            
+            # Return a default response when no new content is available
+            default_decision_log = DecisionLog(
+                Details="No new RFP content provided",
+                Est_TCV="Not specified",
+                Division="Not specified",
+                Pursuit_Sponsor="Not specified",
+                CDD_Booking_Date="2025-01-01",
+                Resources_Required="Not specified",
+                Pursuit_Due_Date="2025-01-01",
+                Client_Ministry_Name="Not specified",
+                I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers="Not specified",
+                Deal_type_current="Not specified",
+                Expected_Gross_Margin="Not specified",
+                Does_Maximus_Canada_have_the_qualifications="Not specified",
+                Rfp_Id=rfp_id
+            )
+            
+            return ProcessRfpResponse(
+                Pursuit_Name=pursuit_name,
+                Decision_Log=default_decision_log
+            )
+
+        # Process only NEW content
+        new_content_only = "".join(new_rfp_parts)
         
-        final_rfp = "".join(rfp_parts)
+        # Update the combined RFP file with existing + new content
+        existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
+        
+        # Add proper separation between existing and new content
+        if existing_rfp and new_content_only:
+            final_rfp = existing_rfp + "\n\n" + new_content_only
+        else:
+            final_rfp = existing_rfp + new_content_only
+        
+        final_blob_path = AzureStorageService().upload_file(
+            pursuit_name,
+            final_rfp,
+            pursuit_name + ".txt",
+        )
+        logger.info(f"Updated RFP uploaded to '{final_blob_path}'.")
 
-        logger.info(f"Final RFP uploaded to '{blob_path}'.")
+        # Call LLM ONLY for NEW content
+        logger.info(f"Calling LLM for NEW RFP content only with: {len(new_content_only)} characters.")
+        llm_response = AzureOpenAIService().get_rfp_decision_log(new_content_only)
+        logger.info(f"LLM response received for new content: {llm_response}")
 
-        logger.info(f"Calling LLM for final rfp with: {len(final_rfp)} characters.")
-        llm_response = AzureOpenAIService().get_rfp_decision_log(final_rfp)
-        logger.info(f"LLM response received: {llm_response}")
+        # Index only NEW content
+        chunks = self.chunk_text(new_content_only)
+        logger.info(f"Chunked NEW RFP content into {len(chunks)} parts for indexing.")
 
-        chunks = self.chunk_text(final_rfp)
-        logger.info(f"Chunked RFP into {len(chunks)} parts.")
-
+        # Create search index and index only the new chunks
         index_name = AzureAISearchService().create_index()
         logger.info(f"Index created: {index_name}")
 
@@ -119,40 +170,56 @@ class RfpService:
             rfp_id=rfp_id,
             chunks=chunks
         )
+        logger.info(f"Indexed {len(indexing_result)} NEW chunks for Pursuit: {pursuit_name}")
 
-        logger.info(f"Indexed {len(indexing_result)} chunks for Pursuit: {pursuit_name}")
-
-        ######
-        existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
-        if existing_rfp:
-            logger.info(f"Found existing RFP for '{pursuit_name}'. Append existing content.")
-            rfp_parts.append(existing_rfp)
-
-        blob_path = AzureStorageService().upload_file(
-            pursuit_name,
-            final_rfp,
-            pursuit_name + ".txt",
-        )
-
-        logger.info(f"Final RFP uploaded to '{blob_path}'.")
-
+        # Prepare metadata for storage
         llm_response_dict = llm_response.model_dump()
-
-        # Merge decision log and LLM response and use that as metadata
+        
+        # Merge decision log and LLM response (from NEW content only)
         merged = {**llm_response_dict, **{k: v for k, v in decision_log_dict.items() if v not in (None, "")}}     
-        merged["rfp_id"] = rfp_id
+        merged["Rfp_Id"] = rfp_id
 
+        # Store metadata
         AzureStorageService().add_metadata(
             folder=pursuit_name,
             metadata=merged
         )
-
         logger.info(f"Metadata stored for Pursuit: {pursuit_name}")
-        ######
 
-        # validate and use the DecisionLog model in the repsonse
-        final_decision_log = DecisionLog.model_validate(merged)
+        # Validate and create final decision log
+        try:
+            # Filter merged data to only include valid DecisionLog fields
+            valid_fields = set(DecisionLog.model_fields.keys())
+            filtered_data = {k: v for k, v in merged.items() if k in valid_fields}
+            
+            final_decision_log = DecisionLog.model_validate(filtered_data)
+            logger.info("Successfully validated DecisionLog model")
+            
+        except Exception as e:
+            logger.error(f"Error validating DecisionLog: {e}")
+            logger.error(f"Available data: {merged}")
+            
+            # Create a fallback decision log with required fields
+            fallback_decision_log = DecisionLog(
+                Details=merged.get("Details", "New RFP content processed"),
+                Est_TCV=merged.get("Est_TCV", "Not specified"),
+                Division=merged.get("Division", "Not specified"),
+                Pursuit_Sponsor=merged.get("Pursuit_Sponsor", "Not specified"),
+                CDD_Booking_Date=merged.get("CDD_Booking_Date", "2025-01-01"),
+                Resources_Required=merged.get("Resources_Required", "Not specified"),
+                Pursuit_Due_Date=merged.get("Pursuit_Due_Date", "2025-01-01"),
+                Client_Ministry_Name=merged.get("Client_Ministry_Name", "Not specified"),
+                I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers=merged.get("I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers", "Not specified"),
+                Deal_type_current=merged.get("Deal_type_current", "Not specified"),
+                Expected_Gross_Margin=merged.get("Expected_Gross_Margin", "Not specified"),
+                Does_Maximus_Canada_have_the_qualifications=merged.get("Does_Maximus_Canada_have_the_qualifications", "Not specified"),
+                Rfp_Id=rfp_id
+            )
+            
+            final_decision_log = fallback_decision_log
+            logger.info("Created fallback DecisionLog model")
 
+        # Create and return the response
         process_rfp_response = ProcessRfpResponse(
             Pursuit_Name=pursuit_name,
             Decision_Log=final_decision_log
