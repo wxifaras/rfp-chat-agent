@@ -32,7 +32,7 @@ class AzureStorageService:
         self.blob_service_client = BlobServiceClient.from_connection_string(settings.AZURE_STORAGE_CONNECTION_STRING)
         self.container_client = self.blob_service_client.get_container_client(settings.AZURE_STORAGE_RFP_CONTAINER_NAME)
 
-    def upload_file(
+    def upload_file_with_dup_check(
         self,
         folder_name: str,
         content: bytes | str,
@@ -78,7 +78,7 @@ class AzureStorageService:
 
         return blob_path, True
 
-    def upload_capabilities(
+    def upload_file(
         self,
         folder_name: str,
         content: bytes | str,
@@ -160,13 +160,12 @@ class AzureStorageService:
                 return part.split("=", 1)[1]
         raise ValueError("AccountKey not found in connection string.")
     
-    def get_capabilities(self) -> str:
-        blob_path = "capabilities/capabilities.txt"
+    def get_blob(self, blob_path: str) -> str:
         blob_client = self.container_client.get_blob_client(blob_path)
 
         try:
             data = blob_client.download_blob().readall()
             return data.decode("utf-8")
         except ResourceNotFoundError:
-            logger.info(f"Blob '{blob_path}' not found; returning empty string.")
+            logger.error(f"{blob_path}' not found.")
             return ""
