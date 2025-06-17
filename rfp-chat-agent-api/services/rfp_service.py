@@ -67,9 +67,10 @@ class RfpService:
             raise ValueError("Invalid decision log data provided")
         
         rfp_parts = []
+
         for file in files:
             file_content = await file.read()
-            blob_path, uploaded = AzureStorageService().upload_file(
+            blob_path, uploaded = AzureStorageService().upload_file_with_dup_check(
                 pursuit_name,
                 file_content,
                 file.filename
@@ -101,29 +102,11 @@ class RfpService:
         
         final_rfp = "".join(rfp_parts)
 
-        blob_path = AzureStorageService().upload_file(
-            pursuit_name,
-            final_rfp,
-            pursuit_name + ".txt",
-        )
-
         logger.info(f"Final RFP uploaded to '{blob_path}'.")
 
+        logger.info(f"Calling LLM for final rfp with: {len(final_rfp)} characters.")
         llm_response = AzureOpenAIService().get_rfp_decision_log(final_rfp)
-        logger.info(f"LLM Response: {llm_response}")
-
-        llm_response_dict = llm_response.model_dump()
-
-        # Merge decision log and LLM response and use that as metadata
-        merged = {**llm_response_dict, **{k: v for k, v in decision_log_dict.items() if v not in (None, "")}}     
-        merged["rfp_id"] = rfp_id
-        
-        AzureStorageService().add_metadata(
-            folder=pursuit_name,
-            metadata=merged
-        )
-
-        logger.info(f"Metadata stored for Pursuit: {pursuit_name}")
+        logger.info(f"LLM response received: {llm_response}")
 
         chunks = self.chunk_text(final_rfp)
         logger.info(f"Chunked RFP into {len(chunks)} parts.")
@@ -139,6 +122,34 @@ class RfpService:
 
         logger.info(f"Indexed {len(indexing_result)} chunks for Pursuit: {pursuit_name}")
 
+        ######
+        existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
+        if existing_rfp:
+            logger.info(f"Found existing RFP for '{pursuit_name}'. Append existing content.")
+            rfp_parts.append(existing_rfp)
+
+        blob_path = AzureStorageService().upload_file(
+            pursuit_name,
+            final_rfp,
+            pursuit_name + ".txt",
+        )
+
+        logger.info(f"Final RFP uploaded to '{blob_path}'.")
+
+        llm_response_dict = llm_response.model_dump()
+
+        # Merge decision log and LLM response and use that as metadata
+        merged = {**llm_response_dict, **{k: v for k, v in decision_log_dict.items() if v not in (None, "")}}     
+        merged["rfp_id"] = rfp_id
+
+        AzureStorageService().add_metadata(
+            folder=pursuit_name,
+            metadata=merged
+        )
+
+        logger.info(f"Metadata stored for Pursuit: {pursuit_name}")
+        ######
+
         # validate and use the DecisionLog model in the repsonse
         final_decision_log = DecisionLog.model_validate(merged)
 
@@ -151,12 +162,12 @@ class RfpService:
     
     async def process_capabilities(self, files: list[UploadFile] = File(...)):
         new_parts = []
-        existing_capabilities = AzureStorageService().get_capabilities() or ""
+        existing_capabilities = AzureStorageService().get_blob("capabilities/capabilities.txt") or ""
         logger.info(f"Loaded existing capabilities: {existing_capabilities[:100]}...")
 
         for file in files:
             content_bytes = await file.read()
-            blob_path, uploaded= AzureStorageService().upload_file("capabilities", content_bytes, file.filename)
+            blob_path, uploaded= AzureStorageService().upload_file_with_dup_check("capabilities", content_bytes, file.filename)
 
             if not uploaded:        
                 logger.info(f"Blob '{blob_path}' already exists. Notifying user.")
@@ -178,7 +189,7 @@ class RfpService:
 
         combined_text = "\n".join(filter(None, [existing_capabilities] + new_parts))
 
-        blob_path = AzureStorageService().upload_capabilities(
+        blob_path = AzureStorageService().upload_file(
             "capabilities",
             combined_text,
             "capabilities.txt"
