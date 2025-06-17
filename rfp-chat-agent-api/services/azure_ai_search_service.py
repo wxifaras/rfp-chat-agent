@@ -55,8 +55,7 @@ class AzureAISearchService:
         # Check if index exists, return if so
         try:
             self.search_index_client.get_index(settings.AZURE_AI_SEARCH_INDEX_NAME)
-            print("Index already exists")
-            return
+            return f"{settings.AZURE_AI_SEARCH_INDEX_NAME} index already exists"
         except:
             pass
 
@@ -103,7 +102,6 @@ class AzureAISearchService:
         )
 
         result = self.search_index_client.create_or_update_index(idx)
-        logger.info(f"Index created: {result.name}")
         return result.name
     
     def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str]) -> List[str]:

@@ -74,14 +74,12 @@ class RfpService:
                 file_content,
                 file.filename
             )
+
             if not uploaded:
-                logger.info(f"Blob '{blob_path}' already exists. Notifying user.")
-                # Overwrite all fileds with n/a
-                decision_log_dict = {field: "n/a" for field in DecisionLog.model_fields}
-                final_decision_log = DecisionLog.model_validate(decision_log_dict)
+                logger.info(f"Blob '{blob_path}' already exists. RFP not uploaded or processed again.")
                 return ProcessRfpResponse(
-                    Pursuit_Name="Duplicate detected. File not uploaded.",
-                    Decision_Log=final_decision_log
+                    Pursuit_Name=pursuit_name,
+                    Decision_Log=decision_log_dict
                 )
 
             logger.info(f"Uploaded '{blob_path}'.")
