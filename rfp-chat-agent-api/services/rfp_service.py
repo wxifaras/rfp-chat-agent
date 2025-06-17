@@ -59,7 +59,7 @@ class RfpService:
         rfp_id = str(uuid.uuid4())
         decision_log_dict = {}
         
-            try:
+        try:
             decision_log_data = json.loads(data)
             decision_log_dict = DecisionLog(**decision_log_data).model_dump(exclude_none=True)
         except Exception as e:
@@ -69,12 +69,18 @@ class RfpService:
         rfp_parts = []
         for file in files:
             file_content = await file.read()
-        
-            blob_path = AzureStorageService().upload_file(
+            blob_path, uploaded = AzureStorageService().upload_file(
                 pursuit_name,
                 file_content,
                 file.filename
             )
+
+            if not uploaded:
+                logger.info(f"Blob '{blob_path}' already exists. RFP not uploaded or processed again.")
+                return ProcessRfpResponse(
+                    Pursuit_Name=pursuit_name,
+                    Decision_Log=decision_log_dict
+                )
 
             logger.info(f"Uploaded '{blob_path}'.")
 
@@ -86,7 +92,7 @@ class RfpService:
 
             p = Path(file.filename)
             blob_name_with_txt = p.with_suffix(".txt").name
-            blob_path = AzureStorageService().upload_file(
+            blob_path= AzureStorageService().upload_file(
                 pursuit_name,
                 content,
                 blob_name_with_txt
@@ -153,7 +159,12 @@ class RfpService:
 
         for file in files:
             content_bytes = await file.read()
-            AzureStorageService().upload_file("capabilities", content_bytes, file.filename)
+            blob_path, uploaded= AzureStorageService().upload_file("capabilities", content_bytes, file.filename)
+
+            if not uploaded:        
+                logger.info(f"Blob '{blob_path}' already exists. Notifying user.")
+                continue  # Skip to next file if already exists
+
             logger.info(f"Uploaded raw file '{file.filename}' to blob storage.")
 
             sas_url = AzureStorageService().generate_blob_sas_url(f"capabilities/{file.filename}")
@@ -164,9 +175,13 @@ class RfpService:
             logger.info(f"Extracted content (first 100 chars): {extracted[:100]}...")
             new_parts.append(extracted)
 
+        if not new_parts:
+            logger.info("No new capabilities extracted from files.")
+            return
+
         combined_text = "\n".join(filter(None, [existing_capabilities] + new_parts))
 
-        blob_path = AzureStorageService().upload_file(
+        blob_path = AzureStorageService().upload_capabilities(
             "capabilities",
             combined_text,
             "capabilities.txt"
