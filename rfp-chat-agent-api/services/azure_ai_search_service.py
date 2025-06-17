@@ -1,5 +1,5 @@
 import uuid
-from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField
+from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField, AzureOpenAIVectorizer, AzureOpenAIVectorizerParameters
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential 
 from azure.search.documents import SearchClient
@@ -76,9 +76,18 @@ class AzureAISearchService:
 
         vector_search = VectorSearch(
             algorithms=[ HnswAlgorithmConfiguration(name="rpf-vector-config", kind="hnsw", parameters={"m":4, "efConstruction":400}) ],
-            profiles=[ VectorSearchProfile(name="rpf-vector-config", algorithm_configuration_name="rpf-vector-config") ]
+            profiles=[ VectorSearchProfile(name="rpf-vector-config", algorithm_configuration_name="rpf-vector-config", vectorizer_name="rfp-vectorizer") ],
+            vectorizers=[ AzureOpenAIVectorizer(
+                vectorizer_name="rfp-vectorizer",
+                parameters=AzureOpenAIVectorizerParameters(
+                resource_url=settings.AZURE_OPENAI_ENDPOINT,
+                deployment_name=settings.AZURE_OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME,
+                model_name=settings.AZURE_OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME,
+                api_key=settings.AZURE_OPENAI_API_KEY
+                )
+            )]
         )
-
+        
         semantic_config = SemanticConfiguration(
             name="semantic-config",
             prioritized_fields=SemanticPrioritizedFields(

@@ -38,7 +38,7 @@ class AzureStorageService:
         content: bytes | str,
         blob_name: str,
         metadata: dict | None = None
-    ) -> str:
+    ) -> tuple[str,bool]:
         """
         Uploads content to Azure Blob Storage, accepting either bytes or string input.
 
@@ -50,6 +50,7 @@ class AzureStorageService:
 
         Returns:
             str: The path to the uploaded blob within the container.
+            bool: True if the upload was successful, False if the blob already exists.
         """
         # Normalize the blob path
         blob_path = f"{folder_name.rstrip('/')}/{blob_name.lstrip('/')}"
@@ -62,14 +63,20 @@ class AzureStorageService:
 
         # Get a client and upload
         blob_client = self.container_client.get_blob_client(blob_path)
-        blob_client.upload_blob(file_bytes, overwrite=True)
+
+        # Check if the blob already exists
+        if blob_client.exists():
+            logger.info(f"Blob '{blob_path}' already exists; Skipping upload.")
+            return blob_path, False
+        
+        blob_client.upload_blob(file_bytes, overwrite=False)
 
         # Set metadata if provided
         if metadata:
             safe_metadata = self.stringify_metadata(metadata)
             blob_client.set_blob_metadata(safe_metadata)
 
-        return blob_path
+        return blob_path, True
 
     def upload_capabilities(
         self,
@@ -77,7 +84,18 @@ class AzureStorageService:
         content: bytes | str,
         blob_name: str,
     ) -> str:
-    
+        """
+        Uploads content to Azure Blob Storage, accepting either bytes or string input.
+        This method is specifically for updating the capabilities file.
+
+        Args:
+            folder_name (str): Target virtual folder path inside the container.
+            content (bytes | str): The file content to upload; string will be encoded to UTF-8.
+            blob_name (str): The target blob's name or relative path.
+
+        Returns:
+            str: The path to the uploaded blob within the container.
+        """
         # Normalize the blob path
         blob_path = f"{folder_name.rstrip('/')}/{blob_name.lstrip('/')}"
 
