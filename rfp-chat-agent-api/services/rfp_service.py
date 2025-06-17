@@ -111,26 +111,9 @@ class RfpService:
         if not new_rfp_parts:
             logger.info("No new RFP content to process. All files were duplicates or no files provided.")
             
-            # Return a default response when no new content is available
-            default_decision_log = DecisionLog(
-                Details="No new RFP content provided",
-                Est_TCV="Not specified",
-                Division="Not specified",
-                Pursuit_Sponsor="Not specified",
-                CDD_Booking_Date="2025-01-01",
-                Resources_Required="Not specified",
-                Pursuit_Due_Date="2025-01-01",
-                Client_Ministry_Name="Not specified",
-                I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers="Not specified",
-                Deal_type_current="Not specified",
-                Expected_Gross_Margin="Not specified",
-                Does_Maximus_Canada_have_the_qualifications="Not specified",
-                Rfp_Id=rfp_id
-            )
-            
             return ProcessRfpResponse(
                 Pursuit_Name=pursuit_name,
-                Decision_Log=default_decision_log
+                Decision_Log=None
             )
 
         # Process only NEW content
@@ -199,24 +182,7 @@ class RfpService:
             logger.error(f"Error validating DecisionLog: {e}")
             logger.error(f"Available data: {merged}")
             
-            # Create a fallback decision log with required fields
-            fallback_decision_log = DecisionLog(
-                Details=merged.get("Details", "New RFP content processed"),
-                Est_TCV=merged.get("Est_TCV", "Not specified"),
-                Division=merged.get("Division", "Not specified"),
-                Pursuit_Sponsor=merged.get("Pursuit_Sponsor", "Not specified"),
-                CDD_Booking_Date=merged.get("CDD_Booking_Date", "2025-01-01"),
-                Resources_Required=merged.get("Resources_Required", "Not specified"),
-                Pursuit_Due_Date=merged.get("Pursuit_Due_Date", "2025-01-01"),
-                Client_Ministry_Name=merged.get("Client_Ministry_Name", "Not specified"),
-                I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers=merged.get("I_have_reviewed_the_Opportunity_Review_Policy_the_pursuit_lead_has_the_following_triggers", "Not specified"),
-                Deal_type_current=merged.get("Deal_type_current", "Not specified"),
-                Expected_Gross_Margin=merged.get("Expected_Gross_Margin", "Not specified"),
-                Does_Maximus_Canada_have_the_qualifications=merged.get("Does_Maximus_Canada_have_the_qualifications", "Not specified"),
-                Rfp_Id=rfp_id
-            )
-            
-            final_decision_log = fallback_decision_log
+            final_decision_log = None
             logger.info("Created fallback DecisionLog model")
 
         # Create and return the response
