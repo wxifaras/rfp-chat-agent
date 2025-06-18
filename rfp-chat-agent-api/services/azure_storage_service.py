@@ -3,6 +3,7 @@ from azure.core.exceptions import ResourceNotFoundError
 from core.settings import settings
 import datetime
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL)
@@ -148,9 +149,18 @@ class AzureStorageService:
             blob_client.set_blob_metadata(safe_metadata)
 
     @staticmethod
+    def clean_ascii(input_str):
+        # Remove all non-ASCII characters (keep only ASCII 0-127)
+        return re.sub(r'[^\x00-\x7F]', '', input_str)
+
+    @staticmethod
     def stringify_metadata(metadata: dict) -> dict:
         """Ensure all metadata keys and values are strings."""
-        return {str(k): str(v) for k, v in metadata.items()}
+        return {
+            AzureStorageService.clean_ascii(str(k)): AzureStorageService.clean_ascii(str(v))
+            for k, v in metadata.items()
+        }
+    
     
     @staticmethod
     def get_account_key_from_conn_str(conn_str: str) -> str:
