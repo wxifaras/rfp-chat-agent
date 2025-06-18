@@ -1,6 +1,5 @@
 from openai import AzureOpenAI
 from prompts.core_prompts import RFP_INGESTION_SYSTEM_PROMPT
-from prompts.core_prompts import SYSTEM_PROMPT
 from core.settings import settings
 from models.decision_log import DecisionLog
 import json

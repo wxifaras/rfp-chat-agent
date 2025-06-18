@@ -27,6 +27,8 @@ logger.addHandler(ch)
 
 @router.post("/rfp/chat")
 async def chat_with_rfp(
+    session_id: Annotated[str, Form(...)],
+    user_id: Annotated[str, Form(...)],
     question: Annotated[str, Form(...)],
     pursuit_name: Annotated[Optional[str], Form()] = None
 ):

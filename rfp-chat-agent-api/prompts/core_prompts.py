@@ -22,12 +22,6 @@ Pursuit_Name, Decision_by_CDD, Details, Est_TCV, Division, Pursuit_Sponsor, CDD_
 When given the RFP text (or conversation context), respond with **only** the JSON object that matches the schema above.
 """
 
-SYSTEM_PROMPT ="""
-You are a data-extraction assistant.
-
-You will be given the text of a Request for Proposal (RFP)
-"""
-
 SEARCH_PROMPT = """Generate a search query based on the user's question and what we've learned from previous searches (if any). Your search query should be a paragraph of what you think you will find in the RFP documents themselves.
 
     Your input will look like this: 
