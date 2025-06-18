@@ -63,6 +63,7 @@ class AzureAISearchService:
             SimpleField(name="chunk_id", type=SearchFieldDataType.String, key=True),
             SimpleField(name="rfp_id", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="pursuit_name", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="file_name", type=SearchFieldDataType.String, filterable=True),
             SearchableField(name="chunk_content", type=SearchFieldDataType.String, searchable=True, retrievable=True),
             SearchField(
                 name="chunk_content_vector",
@@ -104,7 +105,7 @@ class AzureAISearchService:
         result = self.search_index_client.create_or_update_index(idx)
         return result.name
     
-    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str]) -> List[str]:
+    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], file_name: str) -> List[str]:
         """Embed each chunk and upload to vector index."""
         documents = []
         for chunk in chunks:
@@ -115,10 +116,11 @@ class AzureAISearchService:
                 "chunk_id": chunk_id,
                 "rfp_id": rfp_id,
                 "pursuit_name": pursuit_name,
+                "file_name": file_name,
                 "chunk_content": chunk,
                 "chunk_content_vector": embedding  # this must match the Collection(Edm.Single) field
             })
-            logger.info(f"Prepared document for chunk: {chunk_id}")
+            logger.info(f"Prepared document for pursuit: {pursuit_name} file: {file_name} chunk: {chunk_id}")
 
         result = self.search_client.upload_documents(documents=documents)
         uploaded = [str(r.key) for r in result if r.succeeded]
