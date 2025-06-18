@@ -68,7 +68,7 @@ class RfpService:
                 logger.error(f"Error validating decision log data: {e}")
                 raise ValueError("Invalid decision log data provided")
         
-        new_rfp_parts = []  # Only new content for LLM processing and indexing
+        new_rfp_parts = []  # Store tuples of (content, filename)
         
         # Process each uploaded file
         for file in files:
@@ -104,8 +104,8 @@ class RfpService:
 
             logger.info(f"Uploaded text content to '{text_blob_path}'.")
             
-            # Add only new content
-            new_rfp_parts.append(content)
+            # Add content with filename as tuple
+            new_rfp_parts.append((content, file.filename))
 
         # Check if we have any NEW content to process
         if not new_rfp_parts:
@@ -116,17 +116,11 @@ class RfpService:
                 Decision_Log=None
             )
 
-        # Process only NEW content
-        new_content_only = "".join(new_rfp_parts)
+        new_content_only = "".join([content for content, filename in new_rfp_parts])
         
         # Update the combined RFP file with existing + new content
         existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
-        
-        # Add proper separation between existing and new content
-        if existing_rfp and new_content_only:
-            final_rfp = existing_rfp + "\n\n" + new_content_only
-        else:
-            final_rfp = existing_rfp + new_content_only
+        final_rfp = existing_rfp + new_content_only
         
         final_blob_path = AzureStorageService().upload_file(
             pursuit_name,
@@ -140,20 +134,27 @@ class RfpService:
         llm_response = AzureOpenAIService().get_rfp_decision_log(new_content_only)
         logger.info(f"LLM response received for new content: {llm_response}")
 
-        # Index only NEW content
-        chunks = self.chunk_text(new_content_only)
-        logger.info(f"Chunked NEW RFP content into {len(chunks)} parts for indexing.")
-
-        # Create search index and index only the new chunks
+        # Create search index
         index_name = AzureAISearchService().create_index()
         logger.info(f"Index created: {index_name}")
 
-        indexing_result = AzureAISearchService().index_rfp_chunks(
-            pursuit_name=pursuit_name,
-            rfp_id=rfp_id,
-            chunks=chunks
-        )
-        logger.info(f"Indexed {len(indexing_result)} NEW chunks for Pursuit: {pursuit_name}")
+        # Index chunks for each file separately to maintain file name association
+        total_indexed = 0
+        for content, filename in new_rfp_parts:
+            chunks = self.chunk_text(content)
+            logger.info(f"Chunked file '{filename}' into {len(chunks)} parts.")
+            
+            indexing_result = AzureAISearchService().index_rfp_chunks(
+                pursuit_name=pursuit_name,
+                rfp_id=rfp_id,
+                chunks=chunks,
+                file_name=filename
+            )
+            
+            total_indexed += len(indexing_result)
+            logger.info(f"Indexed {len(indexing_result)} chunks for file '{filename}' in pursuit: {pursuit_name}")
+        
+        logger.info(f"Total indexed {total_indexed} chunks across all files uploaded for Pursuit: {pursuit_name}")
 
         # Prepare metadata for storage
         llm_response_dict = llm_response.model_dump()
@@ -183,7 +184,7 @@ class RfpService:
             logger.error(f"Available data: {merged}")
             
             final_decision_log = None
-            logger.info("Created fallback DecisionLog model")
+            logger.info("Set decision log to None due to validation error")
 
         # Create and return the response
         process_rfp_response = ProcessRfpResponse(
