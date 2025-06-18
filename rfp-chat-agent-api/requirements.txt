@@ -6,3 +6,4 @@ azure-ai-documentintelligence
 openai
 tiktoken
 azure-search-documents
+azure-cosmos

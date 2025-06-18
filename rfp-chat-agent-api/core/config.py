@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     AZURE_AI_SEARCH_SERVICE_ENDPOINT: str
     AZURE_AI_SEARCH_SERVICE_KEY: str
     AZURE_AI_SEARCH_INDEX_NAME: str
+    COSMOS_DATABASE_NAME: str
+    COSMOS_CONTAINER_NAME: str
+    COSMOS_ENDPOINT: str
     
     # Optional logging settings
     LOG_LEVEL: str = "INFO"
