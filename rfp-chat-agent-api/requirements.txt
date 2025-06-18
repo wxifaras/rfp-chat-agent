@@ -7,3 +7,4 @@ openai
 tiktoken
 azure-search-documents
 azure-cosmos
+azure-identity
