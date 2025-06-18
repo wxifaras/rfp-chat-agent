@@ -161,7 +161,6 @@ class AzureStorageService:
             for k, v in metadata.items()
         }
     
-    
     @staticmethod
     def get_account_key_from_conn_str(conn_str: str) -> str:
         """Extract the AccountKey from the connection string."""
