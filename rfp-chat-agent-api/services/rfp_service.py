@@ -109,7 +109,6 @@ class RfpService:
             logger.info(f"Uploaded text content to '{text_blob_path}'.")
             
             # Add content with filename as tuple
-            #new_rfp_parts.append((content, file.filename))
             new_rfp_parts.append((allContent, file.filename))
 
         # Check if we have any NEW content to process
@@ -236,39 +235,17 @@ class RfpService:
         )
 
         logger.info(f"Updated capabilities blob uploaded at '{blob_path}'.")
-    """
-    @staticmethod
-    def chunk_text(allContent):
-        enc = tiktoken.get_encoding("o200k_base")
 
-        tokens = enc.encode(allContent.content)
-        chunks = []
-        start = 0
-        while start < len(tokens):
-            end = min(start + settings.CHUNK_SIZE, len(tokens))
-            chunk = enc.decode(tokens[start:end])
-            chunks.append(chunk)
-            start += settings.CHUNK_SIZE - settings.CHUNK_OVERLAP
-
-        return chunks
-    """
     @staticmethod
     def chunk_text(allContent):
         """
-        Reconstructs page content from the words array, tokenizes, and chunks, tracking which tokens belong to which page.
-        Includes chunk overlap using settings.CHUNK_OVERLAP.
-        Args:
-            pages: List of dicts, each with 'pageNumber' and 'words' (list of dicts with 'content').
-            max_chunk_size: Maximum number of tokens per chunk.
-            encoding_name: tiktoken encoding name (default: "cl100k_base").
-        Returns:
-            List of dicts, each with 'chunk_tokens', 'chunked_text', 'pages', and 'page_token_map'.
+        Splits the text content of a document into overlapping token chunks for processing.
+        Maps page to chunck for later reference.
         """
         enc = tiktoken.get_encoding("o200k_base")
         all_tokens = []
-        page_token_map = []  # List of (page_number, token_index_in_page)
+        page_token_map = [] 
         for page in allContent.pages:
-            # Reconstruct the page text from the words array
             page_text = " ".join(word['content'] for word in page.get('words', []))
             tokens = enc.encode(page_text)
             all_tokens.extend(tokens)
@@ -294,7 +271,6 @@ class RfpService:
                 break
             i += chunk_size - chunk_overlap if chunk_size > chunk_overlap else chunk_size
         return chunks
-
 
     async def chat_with_rfp(self, user_query: str, pursuit_name: Optional[str] = None):
         try:
