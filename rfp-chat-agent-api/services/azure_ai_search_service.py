@@ -76,6 +76,10 @@ class AzureAISearchService:
             SimpleField(name="rfp_id", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="pursuit_name", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="file_name", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="page_number", type=SearchFieldDataType.Collection(SearchFieldDataType.Int32),
+            filterable=False,
+            sortable=False,
+            facetable=False,),
             SearchableField(name="chunk_content", type=SearchFieldDataType.String, searchable=True, retrievable=True),
             SearchField(
                 name="chunk_content_vector",
@@ -117,18 +121,23 @@ class AzureAISearchService:
         result = self.search_index_client.create_or_update_index(idx)
         return result.name
     
-    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], file_name: str) -> List[str]:
+    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], page_number: List[str], file_name: str) -> List[str]:
         """Embed each chunk and upload to vector index."""
         documents = []
-        for chunk in chunks:
+        # Use enumerate to get both the index and the chunk
+        for idx, chunk in enumerate(chunks):
             embedding = AzureOpenAIService().create_embedding(chunk)
             chunk_id = str(uuid.uuid4())
             logger.info(f"Generated chunk ID: {chunk_id} for pursuit: {pursuit_name} Chunk content: {chunk[:50]}...")
+            # Get the corresponding page_number by index
+            page = page_number[idx] if idx < len(page_number) else None
+
             documents.append({
                 "chunk_id": chunk_id,
                 "rfp_id": rfp_id,
                 "pursuit_name": pursuit_name,
                 "file_name": file_name,
+                "page_number": page,
                 "chunk_content": chunk,
                 "chunk_content_vector": embedding  # this must match the Collection(Edm.Single) field
             })

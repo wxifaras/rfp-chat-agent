@@ -71,7 +71,7 @@ class RfpService:
                 logger.error(f"Error validating decision log data: {e}")
                 raise ValueError("Invalid decision log data provided")
         
-        new_rfp_parts = []  # Store tuples of (content, filename)
+        new_rfp_parts = []  # Store tuples of (allContent, filename)
         
         # Process each uploaded file
         for file in files:
@@ -93,7 +93,8 @@ class RfpService:
             logger.info(f"SAS URL: {sas_url}")
             time.sleep(5)  # Sleep to ensure SAS URL is generated correctly
             
-            content = AzureDocIntelService().extract_text_from_url(sas_url)
+            allContent = AzureDocIntelService().extract_text_from_url(sas_url)
+            content = allContent.content
             logger.info(f"Extracted content: {content[:100]}...")
 
             # Save extracted text as .txt file
@@ -108,7 +109,8 @@ class RfpService:
             logger.info(f"Uploaded text content to '{text_blob_path}'.")
             
             # Add content with filename as tuple
-            new_rfp_parts.append((content, file.filename))
+            #new_rfp_parts.append((content, file.filename))
+            new_rfp_parts.append((allContent, file.filename))
 
         # Check if we have any NEW content to process
         if not new_rfp_parts:
@@ -119,7 +121,7 @@ class RfpService:
                 Decision_Log=None
             )
 
-        new_content_only = "".join([content for content, filename in new_rfp_parts])
+        new_content_only = "".join([allContent.content for allContent, filename in new_rfp_parts])
         
         # Update the combined RFP file with existing + new content
         existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
@@ -143,14 +145,15 @@ class RfpService:
 
         # Index chunks for each file separately to maintain file name association
         total_indexed = 0
-        for content, filename in new_rfp_parts:
-            chunks = self.chunk_text(content)
+        for allContent, filename in new_rfp_parts:
+            chunks = self.chunk_text(allContent)
             logger.info(f"Chunked file '{filename}' into {len(chunks)} parts.")
             
             indexing_result = AzureAISearchService().index_rfp_chunks(
                 pursuit_name=pursuit_name,
                 rfp_id=rfp_id,
-                chunks=chunks,
+                chunks=[chunk['chunked_text'] for chunk in chunks],
+                page_number= [chunk['pages'] for chunk in chunks],
                 file_name=filename
             )
             
@@ -233,11 +236,12 @@ class RfpService:
         )
 
         logger.info(f"Updated capabilities blob uploaded at '{blob_path}'.")
-    
+    """
     @staticmethod
-    def chunk_text(text):
+    def chunk_text(allContent):
         enc = tiktoken.get_encoding("o200k_base")
-        tokens = enc.encode(text)
+
+        tokens = enc.encode(allContent.content)
         chunks = []
         start = 0
         while start < len(tokens):
@@ -247,7 +251,51 @@ class RfpService:
             start += settings.CHUNK_SIZE - settings.CHUNK_OVERLAP
 
         return chunks
-    
+    """
+    @staticmethod
+    def chunk_text(allContent):
+        """
+        Reconstructs page content from the words array, tokenizes, and chunks, tracking which tokens belong to which page.
+        Includes chunk overlap using settings.CHUNK_OVERLAP.
+        Args:
+            pages: List of dicts, each with 'pageNumber' and 'words' (list of dicts with 'content').
+            max_chunk_size: Maximum number of tokens per chunk.
+            encoding_name: tiktoken encoding name (default: "cl100k_base").
+        Returns:
+            List of dicts, each with 'chunk_tokens', 'chunked_text', 'pages', and 'page_token_map'.
+        """
+        enc = tiktoken.get_encoding("o200k_base")
+        all_tokens = []
+        page_token_map = []  # List of (page_number, token_index_in_page)
+        for page in allContent.pages:
+            # Reconstruct the page text from the words array
+            page_text = " ".join(word['content'] for word in page.get('words', []))
+            tokens = enc.encode(page_text)
+            all_tokens.extend(tokens)
+            page_token_map.extend([page.get('pageNumber', None)] * len(tokens))
+
+        chunks = []
+        i = 0
+        chunk_size = settings.CHUNK_SIZE
+        chunk_overlap = settings.CHUNK_OVERLAP
+
+        while i < len(all_tokens):
+            chunk_tokens = all_tokens[i:i+chunk_size]
+            chunk_page_map = page_token_map[i:i+chunk_size]
+            pages_in_chunk = list(sorted(set(page for page in chunk_page_map)))
+            chunked_text = enc.decode(chunk_tokens)
+            chunks.append({
+                'chunk_tokens': chunk_tokens,
+                'chunked_text': chunked_text,
+                'pages': pages_in_chunk,
+                'page_token_map': chunk_page_map
+            })
+            if len(all_tokens) - i <= chunk_size:
+                break
+            i += chunk_size - chunk_overlap if chunk_size > chunk_overlap else chunk_size
+        return chunks
+
+
     async def chat_with_rfp(self, user_query: str, pursuit_name: Optional[str] = None):
         try:
             # initialize conversation state

@@ -21,4 +21,4 @@ class AzureDocIntelService:
         )
         
         result = poller.result()
-        return result.content
+        return result
