@@ -34,7 +34,7 @@ async def chat_with_rfp(
 ):
     try:
         logger.info(f"Received chat request for RFP pursuit: {pursuit_name} with question: {question}")
-        search_response = await RfpService().chat_with_rfp(question, pursuit_name)
+        search_response = await RfpService().chat_with_rfp(question, pursuit_name, session_id, user_id)
     except ValidationError as e:
         logger.error(f"Validation error: {e}")
         return {"error": str(e)}

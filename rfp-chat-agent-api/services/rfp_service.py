@@ -248,7 +248,11 @@ class RfpService:
 
         return chunks
     
-    async def chat_with_rfp(self, user_query: str, pursuit_name: Optional[str] = None):
+    async def chat_with_rfp(self, 
+                            user_query: str, 
+                            pursuit_name: Optional[str] = None, 
+                            session_id: Optional[str] = None, 
+                            user_id: Optional[str] = None):
         try:
             # initialize conversation state
             conversation = RfpConversation(
