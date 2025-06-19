@@ -14,6 +14,10 @@ import uuid
 import logging
 import tiktoken
 import time
+from services.service_registry import get_azure_openai_service
+from services.service_registry import get_azure_ai_search_service
+from services.service_registry import get_azure_storage_service
+from services.service_registry import get_azure_doc_intel_service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL)
@@ -76,7 +80,7 @@ class RfpService:
         # Process each uploaded file
         for file in files:
             file_content = await file.read()
-            blob_path, uploaded = AzureStorageService().upload_file_with_dup_check(
+            blob_path, uploaded = get_azure_storage_service().upload_file_with_dup_check(
                 pursuit_name,
                 file_content,
                 file.filename
@@ -89,17 +93,17 @@ class RfpService:
             logger.info(f"Uploaded '{blob_path}'.")
 
             # Extract text from the uploaded file
-            sas_url = AzureStorageService().generate_blob_sas_url(blob_path)
+            sas_url = get_azure_storage_service().generate_blob_sas_url(blob_path)
             logger.info(f"SAS URL: {sas_url}")
             time.sleep(5)  # Sleep to ensure SAS URL is generated correctly
             
-            content = AzureDocIntelService().extract_text_from_url(sas_url)
+            content = get_azure_doc_intel_service().extract_text_from_url(sas_url)
             logger.info(f"Extracted content: {content[:100]}...")
 
             # Save extracted text as .txt file
             p = Path(file.filename)
             blob_name_with_txt = p.with_suffix(".txt").name
-            text_blob_path = AzureStorageService().upload_file(
+            text_blob_path = get_azure_storage_service().upload_file(
                 pursuit_name,
                 content,
                 blob_name_with_txt
@@ -122,10 +126,10 @@ class RfpService:
         new_content_only = "".join([content for content, filename in new_rfp_parts])
         
         # Update the combined RFP file with existing + new content
-        existing_rfp = AzureStorageService().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
+        existing_rfp = get_azure_storage_service().get_blob(f"{pursuit_name}/{pursuit_name}.txt") or ""
         final_rfp = existing_rfp + new_content_only
         
-        final_blob_path = AzureStorageService().upload_file(
+        final_blob_path = get_azure_storage_service().upload_file(
             pursuit_name,
             final_rfp,
             pursuit_name + ".txt",
@@ -134,11 +138,11 @@ class RfpService:
 
         # Call LLM ONLY for NEW content
         logger.info(f"Calling LLM for NEW RFP content only with: {len(new_content_only)} characters.")
-        llm_response = AzureOpenAIService().get_rfp_decision_log(new_content_only)
+        llm_response = get_azure_openai_service().get_rfp_decision_log(new_content_only)
         logger.info(f"LLM response received for new content: {llm_response}")
 
         # Create search index
-        index_name = AzureAISearchService().create_index()
+        index_name = get_azure_ai_search_service().create_index()
         logger.info(f"Index created: {index_name}")
 
         # Index chunks for each file separately to maintain file name association
@@ -147,7 +151,7 @@ class RfpService:
             chunks = self.chunk_text(content)
             logger.info(f"Chunked file '{filename}' into {len(chunks)} parts.")
             
-            indexing_result = AzureAISearchService().index_rfp_chunks(
+            indexing_result = get_azure_ai_search_service().index_rfp_chunks(
                 pursuit_name=pursuit_name,
                 rfp_id=rfp_id,
                 chunks=chunks,
@@ -167,7 +171,7 @@ class RfpService:
         merged["Rfp_Id"] = rfp_id
 
         # Store metadata
-        AzureStorageService().add_metadata(
+        get_azure_storage_service().add_metadata(
             folder=pursuit_name,
             metadata=merged
         )
@@ -199,12 +203,12 @@ class RfpService:
     
     async def process_capabilities(self, files: list[UploadFile] = File(...)):
         new_parts = []
-        existing_capabilities = AzureStorageService().get_blob("capabilities/capabilities.txt") or ""
+        existing_capabilities = get_azure_storage_service().get_blob("capabilities/capabilities.txt") or ""
         logger.info(f"Loaded existing capabilities: {existing_capabilities[:100]}...")
 
         for file in files:
             content_bytes = await file.read()
-            blob_path, uploaded= AzureStorageService().upload_file_with_dup_check("capabilities", content_bytes, file.filename)
+            blob_path, uploaded= get_azure_storage_service().upload_file_with_dup_check("capabilities", content_bytes, file.filename)
 
             if not uploaded:        
                 logger.info(f"Blob '{blob_path}' already exists. Notifying user.")
@@ -212,11 +216,11 @@ class RfpService:
 
             logger.info(f"Uploaded raw file '{file.filename}' to blob storage.")
 
-            sas_url = AzureStorageService().generate_blob_sas_url(f"capabilities/{file.filename}")
+            sas_url = get_azure_storage_service().generate_blob_sas_url(f"capabilities/{file.filename}")
             logger.info(f"SAS URL: {sas_url}")
             time.sleep(5)  # wait for blob propagation (if needed)
 
-            extracted = AzureDocIntelService().extract_text_from_url(sas_url)
+            extracted = get_azure_doc_intel_service().extract_text_from_url(sas_url)
             logger.info(f"Extracted content (first 100 chars): {extracted[:100]}...")
             new_parts.append(extracted)
 
@@ -226,7 +230,7 @@ class RfpService:
 
         combined_text = "\n".join(filter(None, [existing_capabilities] + new_parts))
 
-        blob_path = AzureStorageService().upload_file(
+        blob_path = get_azure_storage_service().upload_file(
             "capabilities",
             combined_text,
             "capabilities.txt"
@@ -284,24 +288,21 @@ class RfpService:
     
     async def execute_conversation_workflow(self, conversation: RfpConversation) -> ConversationResult:
         """Executes the agentic rag workflow"""
-        azure_openai = AzureOpenAIService()
-        azure_search = AzureAISearchService()
-        
         # continue if we have not exceeded max attempts and conversation is not finalized
         while conversation.should_continue():
             # Generate and execute search
-            search_query = await self.generate_search_query(conversation, azure_openai)
-            search_results = await self.execute_search(search_query, conversation, azure_search)
+            search_query = await self.generate_search_query(conversation)
+            await self.execute_search(search_query, conversation)
             
             # Review results
-            await self.review_search_results(conversation, search_results, azure_openai)
+            await self.review_search_results(conversation)
 
         # Generate final answer by synthesizing vetted results
-        final_answer = await self.generate_final_answer(conversation, azure_openai)
+        final_answer = await self.generate_final_answer(conversation)
 
         return conversation.to_result(final_answer)
     
-    async def generate_search_query(self, conversation: RfpConversation, azure_openai: AzureOpenAIService) -> str:
+    async def generate_search_query(self, conversation: RfpConversation) -> str:
         """Generate search query using the LLM based on the conversation history"""
 
         logger.info(f"Generating search query for attempt {conversation.attempts + 1}")
@@ -326,7 +327,7 @@ class RfpService:
         ]
         
         try:
-            response = azure_openai.get_chat_response(messages, SearchPromptResponse)
+            response = get_azure_openai_service().get_chat_response(messages, SearchPromptResponse)
             conversation.add_search_attempt(response.search_query)
             return response.search_query
         except Exception as e:
@@ -334,10 +335,10 @@ class RfpService:
             # Fallback to user query
             return conversation.user_query
     
-    async def execute_search(self, query: str, conversation: RfpConversation, azure_search: AzureAISearchService) -> List[SearchResult]:
+    async def execute_search(self, query: str, conversation: RfpConversation):
         """Execute search with proper error handling"""
         try:
-            results = azure_search.run_search(
+            results = get_azure_ai_search_service().run_search(
                 search_query=query,
                 processed_ids=conversation.processed_ids,
                 pursuit_name=conversation.pursuit_name
@@ -351,21 +352,26 @@ class RfpService:
                     "user_query": conversation.user_query,
                     "generated_search_query": query,
                     "pursuit_name": conversation.pursuit_name,
+                    "file_name": conversation.file_name,
                     "results_summary": [
                         # The chunk ID may not be super useful here, but it can help track which chunks were returned. If we change the indexing to include source_file, we should use that here instead
-                        {"pursuit_name": result["pursuit_name"], "chunk_id": result["chunk_id"]}
+                        {
+                            "pursuit_name": result.pursuit_name,
+                            "file_name": result.source_file,
+                            "chunk_id": result.chunk_id
+                        }
                         for result in results
                     ]
                 }
             })
             
-            return results
-            
+            logger.info(f"Search executed successfully: {len(results)} results found for query '{query}'")
+
         except Exception as e:
             logger.error(f"Search execution failed for query '{query}': {str(e)}")
-            return []  # Return empty results to continue workflow
+            conversation.current_results = []
 
-    async def review_search_results(self, conversation: RfpConversation, search_results: List[SearchResult], azure_openai: AzureOpenAIService):
+    async def review_search_results(self, conversation: RfpConversation):
         """
         Review search results and determine which are valid/invalid for answering the user's question.
         Uses Azure OpenAI to analyze relevance and make decisions about continuing or finalizing.
@@ -408,7 +414,7 @@ class RfpService:
             ]
 
             # Get review decision from Azure OpenAI
-            review_decision = azure_openai.get_chat_response(messages, ReviewDecision)
+            review_decision = get_azure_openai_service().get_chat_response(messages, ReviewDecision)
 
             conversation.thought_process.append({
                 "step": "review",
@@ -416,15 +422,17 @@ class RfpService:
                     "review_thought_process": review_decision.thought_process,
                     "valid_results": [
                         {
-                            "chunk_id": conversation.current_results[idx]["chunk_id"],
-                            "pursuit_name": conversation.current_results[idx]["pursuit_name"],
+                            "chunk_id": conversation.current_results[idx].chunk_id,
+                            "pursuit_name": conversation.current_results[idx].pursuit_name,
+                            "source_file": conversation.current_results[idx].source_file
                         }
                         for idx in review_decision.valid_results
                     ],
                     "invalid_results": [ 
                         {
-                            "chunk_id": conversation.current_results[idx]["chunk_id"],
-                            "pursuit_name": conversation.current_results[idx]["pursuit_name"],
+                            "chunk_id": conversation.current_results[idx].chunk_id,
+                            "pursuit_name": conversation.current_results[idx].source_file,
+                            "source_file": conversation.current_results[idx].source_file
                         }
                         for idx in review_decision.invalid_results
                     ],
@@ -455,13 +463,13 @@ class RfpService:
             for idx in review_decision.valid_results:
                 result = conversation.current_results[idx]
                 conversation.vetted_results.append(result)
-                conversation.processed_ids.add(result["chunk_id"])
+                conversation.processed_ids.add(result.chunk_id)
             
             # add all invalid results from this review to the discarded results list of the overall conversation
             for idx in review_decision.invalid_results:
                 result = conversation.current_results[idx]
                 conversation.discarded_results.append(result)
-                conversation.processed_ids.add(result["chunk_id"])
+                conversation.processed_ids.add(result.chunk_id)
             
             # resest the current results to empty for the next search
             conversation.current_results = []
@@ -479,10 +487,10 @@ class RfpService:
             result_section = [
                 f"\nResult #{i}",
                 "=" * 80,
-                f"Chunk ID: {result.get('chunk_id', 'Unknown')}",
-                f"Source: {result.get('pursuit_name', 'Unknown')}",
+                f"Chunk ID: {result.chunk_id}",
+                f"Source: {result.source_file}",
                 "\n--- Content ---",
-                result.get('chunk_content', 'No content available'),
+                result.chunk_content,
                 "--- End Content ---"
             ]
             output_parts.extend(result_section)
@@ -505,7 +513,7 @@ class RfpService:
         
         return "\n".join(history_parts)
 
-    async def generate_final_answer(self, conversation: RfpConversation, azure_openai: AzureOpenAIService) -> str:
+    async def generate_final_answer(self, conversation: RfpConversation) -> str:
         """Generate final answer using Azure OpenAI with proper error handling"""
         
         logger.info(f"Generating final answer.")
@@ -520,11 +528,12 @@ class RfpService:
                 result_parts = [
                     f"\nResult #{i}",
                     "=" * 80,
-                    f"ID: {result.get('chunk_id')}",
-                    f"Pursuit Name: {result.get('pursuit_name')}",
+                    f"ID: {result.chunk_id}",
+                    f"Pursuit Name: {result.pursuit_name}",
+                    f"Source File: {result.source_file}",
                     "\n<Start Content>",
                     "-" * 80,
-                    result.get('chunk_content'),
+                    result.chunk_content,
                     "-" * 80,
                     "<End Content>"
                 ]
@@ -551,7 +560,7 @@ class RfpService:
                 {"role": "user", "content": llm_input}
             ]
             
-            final_answer = azure_openai.get_chat_response_text(messages)
+            final_answer = get_azure_openai_service().get_chat_response_text(messages)
             
             conversation.thought_process.append({
                 "step": "response",

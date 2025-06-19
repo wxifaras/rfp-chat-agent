@@ -12,6 +12,7 @@ class SearchPromptResponse(BaseModel):
 class RfpConversation:
     user_query: str
     pursuit_name: Optional[str]
+    file_name: Optional[str] = None
     max_attempts: int = 3
     
     # State maintained while processing the agent rag workflow
