@@ -166,7 +166,7 @@ class AzureAISearchService:
             search_text=search_query,
             vector_queries=[vector_query],
             filter=filter_str,
-            select=["chunk_id", "chunk_content", "pursuit_name"],
+            select=["chunk_id", "chunk_content", "pursuit_name", "file_name"],
             top=NUM_SEARCH_RESULTS
         )
         search_results = []
