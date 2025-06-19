@@ -107,6 +107,7 @@ class AzureAISearchService:
                 title_field=SemanticField(field_name="pursuit_name")
             )
         )
+        
         idx = SearchIndex(
             name=settings.AZURE_AI_SEARCH_INDEX_NAME,
             fields=fields,
