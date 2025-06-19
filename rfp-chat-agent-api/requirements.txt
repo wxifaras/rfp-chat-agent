@@ -6,5 +6,5 @@ azure-ai-documentintelligence
 openai
 tiktoken
 azure-search-documents
-TypedDict
-Set
+azure-cosmos
+azure-identity

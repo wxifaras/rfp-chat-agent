@@ -1,5 +1,5 @@
 import uuid
-from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField
+from azure.search.documents.indexes.models import SearchIndex, SearchField, VectorSearch, VectorSearchProfile, HnswAlgorithmConfiguration, SemanticSearch, SemanticConfiguration, SemanticPrioritizedFields, SemanticField, AzureOpenAIVectorizer, AzureOpenAIVectorizerParameters
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential 
 from azure.search.documents import SearchClient
@@ -67,8 +67,7 @@ class AzureAISearchService:
         # Check if index exists, return if so
         try:
             self.search_index_client.get_index(settings.AZURE_AI_SEARCH_INDEX_NAME)
-            print("Index already exists")
-            return
+            return f"{settings.AZURE_AI_SEARCH_INDEX_NAME} index already exists"
         except:
             pass
 
@@ -76,6 +75,7 @@ class AzureAISearchService:
             SimpleField(name="chunk_id", type=SearchFieldDataType.String, filterable=True, key=True),
             SimpleField(name="rfp_id", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="pursuit_name", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="file_name", type=SearchFieldDataType.String, filterable=True),
             SearchableField(name="chunk_content", type=SearchFieldDataType.String, searchable=True, retrievable=True),
             SearchField(
                 name="chunk_content_vector",
@@ -88,9 +88,18 @@ class AzureAISearchService:
 
         vector_search = VectorSearch(
             algorithms=[ HnswAlgorithmConfiguration(name="rpf-vector-config", kind="hnsw", parameters={"m":4, "efConstruction":400}) ],
-            profiles=[ VectorSearchProfile(name="rpf-vector-config", algorithm_configuration_name="rpf-vector-config") ]
+            profiles=[ VectorSearchProfile(name="rpf-vector-config", algorithm_configuration_name="rpf-vector-config", vectorizer_name="rfp-vectorizer") ],
+            vectorizers=[ AzureOpenAIVectorizer(
+                vectorizer_name="rfp-vectorizer",
+                parameters=AzureOpenAIVectorizerParameters(
+                resource_url=settings.AZURE_OPENAI_ENDPOINT,
+                deployment_name=settings.AZURE_OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME,
+                model_name=settings.AZURE_OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME,
+                api_key=settings.AZURE_OPENAI_API_KEY
+                )
+            )]
         )
-
+        
         semantic_config = SemanticConfiguration(
             name="semantic-config",
             prioritized_fields=SemanticPrioritizedFields(
@@ -106,10 +115,9 @@ class AzureAISearchService:
         )
 
         result = self.search_index_client.create_or_update_index(idx)
-        logger.info(f"Index created: {result.name}")
         return result.name
     
-    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str]) -> List[str]:
+    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], file_name: str) -> List[str]:
         """Embed each chunk and upload to vector index."""
         documents = []
         for chunk in chunks:
@@ -120,10 +128,11 @@ class AzureAISearchService:
                 "chunk_id": chunk_id,
                 "rfp_id": rfp_id,
                 "pursuit_name": pursuit_name,
+                "file_name": file_name,
                 "chunk_content": chunk,
                 "chunk_content_vector": embedding  # this must match the Collection(Edm.Single) field
             })
-            logger.info(f"Prepared document for chunk: {chunk_id}")
+            logger.info(f"Prepared document for pursuit: {pursuit_name} file: {file_name} chunk: {chunk_id}")
 
         result = self.search_client.upload_documents(documents=documents)
         uploaded = [str(r.key) for r in result if r.succeeded]

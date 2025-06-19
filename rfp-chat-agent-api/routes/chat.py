@@ -1,5 +1,5 @@
 from typing_extensions import Annotated
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 from typing import Dict, Any, Optional
 from services.rfp_service import RfpService
@@ -49,10 +49,13 @@ async def upload_rfp(
     try:
         logger.info(f"Received RFP upload request for pursuit: {pursuit_name}")
         process_rfp_response = await RfpService().process_rfp(pursuit_name, data, files)           
+        return process_rfp_response
     except ValidationError as e:
         logger.error(f"Validation error: {e}")
-        return {"error": str(e)}
-    return process_rfp_response
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/capabilities/upload")
 async def upload_capabilities(files: Annotated[list[UploadFile], File(...)]):
