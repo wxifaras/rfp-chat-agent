@@ -3,6 +3,7 @@ from azure.search.documents.indexes.models import SearchIndex, SearchField, Vect
 from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential 
 from azure.search.documents import SearchClient
+from azure.search.documents.models import VectorizedQuery
 from azure.search.documents.indexes.models import (
     SimpleField,
     SearchFieldDataType,
@@ -18,9 +19,12 @@ from azure.search.documents.indexes.models import (
     SearchIndex
 )
 import logging
-from typing import List
+from typing import List, TypedDict, Set, Optional
 from core.settings import settings
 from services.azure_openai_service import AzureOpenAIService
+
+NUM_SEARCH_RESULTS = 5
+K_NEAREST_NEIGHBORS = 30
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -38,6 +42,14 @@ ch.setFormatter(formatter)
 
 # Add handler
 logger.addHandler(ch)
+
+# Type Definitions
+class SearchResult(TypedDict):
+    id: str
+    content: str
+    source_file: str
+    source_pages: int
+    score: float
 
 class AzureAISearchService:
     def __init__(self): 
@@ -60,7 +72,7 @@ class AzureAISearchService:
             pass
 
         fields = [
-            SimpleField(name="chunk_id", type=SearchFieldDataType.String, key=True),
+            SimpleField(name="chunk_id", type=SearchFieldDataType.String, filterable=True, key=True),
             SimpleField(name="rfp_id", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="pursuit_name", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="file_name", type=SearchFieldDataType.String, filterable=True),
@@ -132,3 +144,47 @@ class AzureAISearchService:
             logger.info(f"Successfully uploaded {len(uploaded)} chunks.")
         
         return uploaded
+    
+    def run_search(
+            self,
+            search_query: str,
+            processed_ids: Set[str],
+            #category_filter: str | None = None,
+            pursuit_name: Optional[str] = None
+        ) -> List[SearchResult]:
+        """
+        Perform a search using Azure Cognitive Search with both semantic and vector queries.
+        """
+        query_vector = AzureOpenAIService().create_embedding(search_query)
+        vector_query = VectorizedQuery(
+            vector=query_vector,
+            k_nearest_neighbors=K_NEAREST_NEIGHBORS,
+            fields="chunk_content_vector",
+        )
+        filter_parts = []
+        if processed_ids:
+            ids_string = ','.join(processed_ids)
+            filter_parts.append(f"not search.in(chunk_id, '{ids_string}')")
+        #if category_filter:
+        #    filter_parts.append(f"({category_filter})")
+        if pursuit_name:
+            filter_parts.append(f"(pursuit_name eq '{pursuit_name}')")
+        filter_str = " and ".join(filter_parts) if filter_parts else None
+
+        results = self.search_client.search(
+            search_text=search_query,
+            vector_queries=[vector_query],
+            filter=filter_str,
+            select=["chunk_id", "chunk_content", "pursuit_name", "file_name"],
+            top=NUM_SEARCH_RESULTS
+        )
+        search_results = []
+        for result in results:
+            search_result: SearchResult = {
+                "chunk_id": result["chunk_id"],
+                "chunk_content": result["chunk_content"],
+                "pursuit_name": result["pursuit_name"],
+                "score": result["@search.score"]
+            }
+            search_results.append(search_result)
+        return search_results

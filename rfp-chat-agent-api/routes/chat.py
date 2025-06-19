@@ -25,9 +25,20 @@ ch.setFormatter(formatter)
 # Add handler
 logger.addHandler(ch)
 
-@router.get("/rfp/chat", response_model=Dict[str, Any])
-async def chat_with_rfp():
-    return {"message": "Hello World"}
+@router.post("/rfp/chat")
+async def chat_with_rfp(
+    session_id: Annotated[str, Form(...)],
+    user_id: Annotated[str, Form(...)],
+    question: Annotated[str, Form(...)],
+    pursuit_name: Annotated[Optional[str], Form()] = None
+):
+    try:
+        logger.info(f"Received chat request for RFP pursuit: {pursuit_name} with question: {question}")
+        search_response = await RfpService().chat_with_rfp(question, pursuit_name)
+    except ValidationError as e:
+        logger.error(f"Validation error: {e}")
+        return {"error": str(e)}
+    return search_response
 
 @router.post("/rfp/upload", response_model=ProcessRfpResponse)
 async def upload_rfp(
