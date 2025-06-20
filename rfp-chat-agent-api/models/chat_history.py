@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import Optional
-from enum import StrEnum, auto
+from enum import StrEnum
 import uuid
 
 class Role(StrEnum):
@@ -19,4 +19,4 @@ class ChatMessage(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Message timestamp (UTC, timezone-aware)"
     )
-    #model_config = {"use_enum_values": True}
+    model_config = {"use_enum_values": True}

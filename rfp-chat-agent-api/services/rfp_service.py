@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 from fastapi import File, Form, UploadFile
 from models.decision_log import DecisionLog
 from models.process_rfp_response import ProcessRfpResponse
@@ -15,6 +15,9 @@ from services.service_registry import get_azure_openai_service
 from services.service_registry import get_azure_ai_search_service
 from services.service_registry import get_azure_storage_service
 from services.service_registry import get_azure_doc_intel_service
+from services.service_registry import get_chat_history_manager
+from models.chat_history import ChatMessage, Role
+from prompts.core_prompts import SEARCH_PROMPT
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL)
@@ -255,11 +258,18 @@ class RfpService:
                             session_id: Optional[str] = None, 
                             user_id: Optional[str] = None):
         try:
+
+            if not session_id:
+                session_id = str(uuid.uuid4())
+                logger.info(f"Generated new session ID: {session_id}")
+
             # initialize conversation state
             conversation = RfpConversation(
                 user_query=user_query,
                 pursuit_name=pursuit_name,
-                max_attempts=MAX_ATTEMPTS
+                max_attempts=MAX_ATTEMPTS,
+                user_id=user_id,
+                session_id=session_id
             )
 
             # Execute conversation workflow
@@ -286,6 +296,17 @@ class RfpService:
     async def execute_conversation_workflow(self, conversation: RfpConversation) -> ConversationResult:
         """Executes the agentic rag workflow"""
         # continue if we have not exceeded max attempts and conversation is not finalized
+
+        # Initialize chat message for user query
+        chat_message = ChatMessage(
+            user_id= conversation.user_id,
+            session_id=conversation.session_id,
+            role=Role.USER,
+            message=conversation.user_query
+        )
+                
+        get_chat_history_manager().add_message(chat_message)
+
         while conversation.should_continue():
             # Generate and execute search
             search_query = await self.generate_search_query(conversation)
@@ -304,8 +325,6 @@ class RfpService:
 
         logger.info(f"Generating search query for attempt {conversation.attempts + 1}")
 
-        from prompts.core_prompts import SEARCH_PROMPT
-        
         # Build context more clearly
         context_parts = [f"User Question: {conversation.user_query}"]
         
@@ -317,14 +336,24 @@ class RfpService:
                 context_parts.append(f"   review: {review}\n")
         
         context = "\n".join(context_parts)
-        
+
+        # No reason to query chat history because context is already built from search history and user query
         messages = [
             {"role": "system", "content": SEARCH_PROMPT},
             {"role": "user", "content": context}
         ]
-        
+                
         try:
             response = get_azure_openai_service().get_chat_response(messages, SearchPromptResponse)
+            
+            chat_message = ChatMessage(
+                user_id=conversation.user_id,
+                session_id=conversation.session_id,
+                role=Role.ASSISTANT,
+                message=response.search_query)
+            
+            get_chat_history_manager().add_message(chat_message)
+
             conversation.add_search_attempt(response.search_query)
             return response.search_query
         except Exception as e:
@@ -552,13 +581,37 @@ class RfpService:
                 - Cite your sources using the following format: some text <cit>pursuit name - chunk id</cit> , some more text <cit>pursuit name - chunk id> , etc.
                 - Only cite sources that are actually used in the answer."""
 
+            chat_history = get_chat_history_manager().get_history(conversation.session_id)
+
+            # New Messages
             messages = [
                 {"role": "system", "content": final_prompt},
                 {"role": "user", "content": llm_input}
             ]
+
+            for msg in messages:
+                chat_message = ChatMessage(
+                    user_id=conversation.user_id,
+                    session_id=conversation.session_id,
+                    role=Role(msg["role"]),
+                    message=msg["content"]
+                )
+                get_chat_history_manager().add_message(chat_message)
+
+            for msg in chat_history:
+                messages.append({"role": msg.role, "content": msg.message})
             
             final_answer = get_azure_openai_service().get_chat_response_text(messages)
             
+            chat_message = ChatMessage(
+                user_id=conversation.user_id,
+                session_id=conversation.session_id,
+                role=Role.ASSISTANT,
+                message=final_answer
+            )
+
+            get_chat_history_manager().add_message(chat_message)
+
             conversation.thought_process.append({
                 "step": "response",
                 "details": {

@@ -2,6 +2,7 @@ import uuid
 import logging
 from services.cosmos_db_service import CosmosDBService
 from models.chat_history import ChatMessage
+from core.settings import settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(settings.LOG_LEVEL)

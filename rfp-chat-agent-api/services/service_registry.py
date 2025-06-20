@@ -7,6 +7,7 @@ from services.azure_openai_service import AzureOpenAIService
 from services.azure_ai_search_service import AzureAISearchService
 from services.azure_storage_service import AzureStorageService
 from services.azure_doc_intel_service import AzureDocIntelService
+from services.chat_history_manager import ChatHistoryManager
 import logging
 from core.settings import settings
 
@@ -62,3 +63,12 @@ def get_azure_doc_intel_service():
     logger.info("Creating new AzureDocIntelService singleton instance")
     
     return AzureDocIntelService()
+
+@lru_cache(maxsize=1)
+def get_chat_history_manager():
+    """
+    Create and cache a single instance of ChatHistoryManager
+    """
+    logger.info("Creating new ChatHistoryManager singleton instance")
+    
+    return ChatHistoryManager()
