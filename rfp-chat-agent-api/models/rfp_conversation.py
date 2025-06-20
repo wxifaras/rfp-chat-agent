@@ -13,7 +13,9 @@ class RfpConversation:
     user_query: str
     pursuit_name: Optional[str]
     file_name: Optional[str] = None
-    max_attempts: int = 3
+    max_attempts: int = 3,
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
     
     # State maintained while processing the agent rag workflow
     attempts: int = field(default=0)
