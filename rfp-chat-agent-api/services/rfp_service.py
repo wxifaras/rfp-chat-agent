@@ -289,7 +289,7 @@ class RfpService:
                 "citations": result.citations,
                 "thought_process": result.thought_process,
                 "attempts": result.attempts,
-                "search_queries": result.search_queries
+                "search_queries": result.search_queries,
             }
 
         except Exception as e:

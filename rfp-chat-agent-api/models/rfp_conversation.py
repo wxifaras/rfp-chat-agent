@@ -62,7 +62,6 @@ class ConversationResult:
     attempts: int
     search_queries: List[str]
 
-
 NUM_SEARCH_RESULTS = 5
 
 # Create a type for indices from 0 to NUM_SEARCH_RESULTS-1

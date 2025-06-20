@@ -184,7 +184,7 @@ class AzureAISearchService:
             search_text=search_query,
             vector_queries=[vector_query],
             filter=filter_str,
-            select=["chunk_id", "chunk_content", "pursuit_name", "file_name"],
+            select=["chunk_id", "chunk_content", "pursuit_name", "file_name", "page_number"],
             top=NUM_SEARCH_RESULTS
         )
         search_results = []
@@ -193,7 +193,8 @@ class AzureAISearchService:
                 "chunk_id": result["chunk_id"],
                 "chunk_content": result["chunk_content"],
                 "pursuit_name": result["pursuit_name"],
-                "score": result["@search.score"]
+                "score": result["@search.score"],
+                "page_number": result["page_number"],
             }
             search_results.append(search_result)
         return search_results
