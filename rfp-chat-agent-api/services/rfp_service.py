@@ -244,18 +244,13 @@ class RfpService:
     
     @staticmethod
     def chunk_text(allContent):
-        """
-        Splits the text content of a document into overlapping token chunks for processing.
-        Maps page to chunck for later reference.
-        """
         enc = tiktoken.get_encoding("o200k_base")
-        all_tokens = []
-        page_token_map = [] 
+        all_tokens, page_token_map = [], []
         for page in allContent.pages:
-            page_text = " ".join(word['content'] for word in page.get('words', []))
+            page_text = " ".join(w['content'] for w in page.get('words', []))
             tokens = enc.encode(page_text)
             all_tokens.extend(tokens)
-            page_token_map.extend([page.get('pageNumber', None)] * len(tokens))
+            page_token_map.extend([page.get('pageNumber')] * len(tokens))
 
         chunks = []
         i = 0
@@ -263,19 +258,25 @@ class RfpService:
         chunk_overlap = settings.CHUNK_OVERLAP
 
         while i < len(all_tokens):
-            chunk_tokens = all_tokens[i:i+chunk_size]
-            chunk_page_map = page_token_map[i:i+chunk_size]
-            pages_in_chunk = list(sorted(set(page for page in chunk_page_map)))
+            chunk_tokens = all_tokens[i : i + chunk_size]
+            chunk_page_map = page_token_map[i : i + chunk_size]
             chunked_text = enc.decode(chunk_tokens)
+            pages_in_chunk = sorted(set(chunk_page_map))
+
             chunks.append({
                 'chunk_tokens': chunk_tokens,
                 'chunked_text': chunked_text,
                 'pages': pages_in_chunk,
                 'page_token_map': chunk_page_map
             })
+
+            # Calculate overlap adaptively (at least your default, but scaled)
+            overlap = max(int(chunk_size * 0.15), chunk_overlap)
+            step = chunk_size - overlap
+
             if len(all_tokens) - i <= chunk_size:
-                break
-            i += chunk_size - chunk_overlap if chunk_size > chunk_overlap else chunk_size
+                break  # last chunk done
+            i += step
         return chunks
     
     async def chat_with_rfp(self, 
