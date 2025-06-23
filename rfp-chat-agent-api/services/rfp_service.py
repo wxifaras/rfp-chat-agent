@@ -41,8 +41,7 @@ MAX_ATTEMPTS = 3
 class RfpService:
     def __init__(self):
         if not all([
-            settings.CHUNK_SIZE,
-            settings.CHUNK_OVERLAP
+            settings.PAGE_OVERLAP
         ]):
             raise ValueError("Required settings are missing")
 
@@ -244,38 +243,53 @@ class RfpService:
     
     @staticmethod
     def chunk_text(allContent):
-        """
-        Splits the text content of a document into overlapping token chunks for processing.
-        Maps page to chunck for later reference.
-        """
         enc = tiktoken.get_encoding("o200k_base")
-        all_tokens = []
-        page_token_map = [] 
-        for page in allContent.pages:
-            page_text = " ".join(word['content'] for word in page.get('words', []))
+        pages = allContent.pages
+        page_tokens = []
+        page_numbers = []
+
+        # Precompute tokens for each page
+        for page in pages:
+            page_text = " ".join(w['content'] for w in page.get('words', []))
             tokens = enc.encode(page_text)
-            all_tokens.extend(tokens)
-            page_token_map.extend([page.get('pageNumber', None)] * len(tokens))
+            page_tokens.append(tokens)
+            page_numbers.append(page.get('pageNumber'))
 
         chunks = []
-        i = 0
-        chunk_size = settings.CHUNK_SIZE
-        chunk_overlap = settings.CHUNK_OVERLAP
+        
+        page_overlap_percent = float(settings.PAGE_OVERLAP) / 100
 
-        while i < len(all_tokens):
-            chunk_tokens = all_tokens[i:i+chunk_size]
-            chunk_page_map = page_token_map[i:i+chunk_size]
-            pages_in_chunk = list(sorted(set(page for page in chunk_page_map)))
-            chunked_text = enc.decode(chunk_tokens)
+        for idx, tokens in enumerate(page_tokens):
+
+            prev_tokens = []
+            if idx > 0:
+                prev = page_tokens[idx - 1]
+                prev_len = max(1, int(len(prev) * page_overlap_percent))
+                prev_tokens = prev[-prev_len:]
+
+            next_tokens = []
+            if idx < len(page_tokens) - 1:
+                nxt = page_tokens[idx + 1]
+                next_len = max(1, int(len(nxt) * page_overlap_percent))
+                next_tokens = nxt[:next_len]
+
+            combined_tokens = prev_tokens + tokens + next_tokens
+            combined_page_map = (
+                [page_numbers[idx - 1]] * len(prev_tokens) if idx > 0 else []
+            ) + [page_numbers[idx]] * len(tokens) + (
+                [page_numbers[idx + 1]] * len(next_tokens) if idx < len(page_tokens) - 1 else []
+            )
+
+            chunked_text = enc.decode(combined_tokens)
+            pages_in_chunk = sorted(set(p for p in combined_page_map if p is not None))
+
             chunks.append({
-                'chunk_tokens': chunk_tokens,
+                'chunk_tokens': combined_tokens,
                 'chunked_text': chunked_text,
                 'pages': pages_in_chunk,
-                'page_token_map': chunk_page_map
+                'page_token_map': combined_page_map
             })
-            if len(all_tokens) - i <= chunk_size:
-                break
-            i += chunk_size - chunk_overlap if chunk_size > chunk_overlap else chunk_size
+
         return chunks
     
     async def chat_with_rfp(self, 
