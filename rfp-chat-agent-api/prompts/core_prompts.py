@@ -99,3 +99,102 @@ SEARCH_REVIEW_PROMPT = """Review these search results and determine which contai
    If the user asks a general question, consider all chunks with semi-relevant information to be valid. Our goal is to compile a comprehensive answer to the user's question.
    Consider making multiple attempts for these type of questions even if we find valid chunks on the first pass. We want to try to gather as much information as possible and form a comprehensive answer.
    """
+
+TRIGGER_RESEARCH_PROMPT = """You are an intelligent assistant helping to decide whether a request is related to a 'Capability' or a 'Process'.
+
+- A **Capability** means the user is asking something that relates to the company's services, qualifications, experience, tools, or legal/technical readiness. These usually fall into categories such as:
+  1. Strategic Fit
+  2. Capabilities & Qualifications
+  3. Legal & Risk Considerations
+  4. Financial Viability
+  5. Evaluation Criteria & Submission Requirements
+  6. Competitive Positioning
+  7. Delivery & Operational Readiness
+  8. Internal Resource Readiness
+  9. Regulatory & Data Sensitivity
+
+- A **Process** means the user is asking about standard procedures, approval flows, internal policies, or how something gets done manually (like submitting forms, requesting access, or initiating workflows).
+
+Classify the user's message into one of the two categories, and explain why.
+
+Respond only in this format:
+Type: <Capability or Process>
+Reason: <short explanation>  
+ """
+
+CAPABILITIES_SEARCH_PROMPT = """
+Generate a search query based on the user's capability-related question and what we've learned from previous searches (if any). 
+Your search query should be a paragraph composed of terms and phrases that are likely to be found in real RFP documents and are relevant to the capability in question.
+
+A **Capability** means the user is asking something that relates to the company’s **services**, **qualifications**, **experience**, **tools**, or **legal/technical readiness**. These usually fall into one or more of the following categories:
+
+1. Strategic Fit  
+2. Capabilities & Qualifications  
+3. Legal & Risk Considerations  
+4. Financial Viability  
+5. Evaluation Criteria & Submission Requirements  
+6. Competitive Positioning  
+7. Delivery & Operational Readiness  
+8. Internal Resource Readiness  
+9. Regulatory & Data Sensitivity  
+
+Your input will look like this: 
+    User Capability Question: <user question>
+    Previous Review Analysis: <previous search details & review/analysis>
+
+Your task:
+1. Understand the specific capability being asked about and identify which of the above categories it maps to
+2. Analyze prior reviews to understand any missing context or unresolved information
+3. Generate a search query using terms and phrases that would likely be present in real RFP documents, focusing on the capability themes above
+
+###Output Format###
+
+search_query: A concise paragraph of RFP-relevant search terms, phrases, and keywords inferred from the user's capability question
+
+###RFP Content Areas to Consider###
+
+- **Capabilities and Qualifications**: Specific capabilities, qualifications, certifications, experience, past performance  
+- **Legal and Risk Considerations**: Contract terms, indemnity, SLAs, legal risk language  
+- **Financial Viability**: Total contract value, budget thresholds, financial models, payment terms  
+- **Evaluation and Submission Requirements**: Evaluation criteria, mandatory forms/templates, scoring rubrics  
+- **Regulatory and Data Sensitivity**: Handling of PHI/PII, residency laws, compliance frameworks
+
+Make sure the generated query is optimized for identifying RFPs where this capability is required, mentioned, or emphasized.
+"""
+
+REVIEW_CAPABILITY_DOCUMENT_PROMPT = """
+Review these search results and determine which documents contain relevant information for identifying the company's capabilities in response to the user's question.
+
+Your input will include:
+1. **User Capability Question**: A question focused on company qualifications, experience, technical/legal readiness, strategic fit, or related capability domains.
+2. **Current Search Results**: A list of RFP document snippets or sections returned by the search engine.
+3. **Previously Vetted Results**: A list of already reviewed and accepted or rejected results.
+4. **Previous Attempts**: A log of prior search queries, filters, and any known gaps.
+
+Your task:
+- Assess the current results and determine which ones help answer the user's capability question. Relevance should be based on the presence of **services, qualifications, certifications, prior experience, tooling, compliance frameworks, staffing models, or any indicators of organizational readiness**.
+- Include any content related to the following **capability domains**:
+  - Strategic Fit
+  - Capabilities & Qualifications
+  - Legal & Risk Considerations
+  - Financial Viability
+  - Evaluation Criteria & Submission Requirements
+  - Competitive Positioning
+  - Delivery & Operational Readiness
+  - Internal Resource Readiness
+  - Regulatory & Data Sensitivity
+
+Respond with:
+1. **thought_process**: Your analytical reasoning. Indicate whether the user question is general or specific. Clearly state which chunks provide relevant capability-related information. If critical data is missing, specify what that is and recommend how the next query could be adjusted. Conclude with a decision on whether to proceed or re-search.
+2. **valid_results**: A list of indices (0-N) from the current results that are valid and useful.
+3. **invalid_results**: A list of indices (0-N) that are irrelevant and can be ignored.
+4. **decision**: Return `"retry"` if additional information is needed, or `"finalize"` if you have enough to generate an informed answer.
+
+Guidance:
+- If a chunk contains **any partially or fully useful information** related to the user's capability question, mark it as valid.
+- Do **not discard chunks** that could help build a thorough answer, even if they don't contain a direct answer.
+- For **specific capability questions** (e.g., ISO certification, number of qualified personnel), only include precise matches.
+- For **general capability questions**, retain all semi-relevant content and be willing to make multiple search attempts to deepen the response quality.
+
+Your goal is to **curate content that highlights the organization's ability to respond effectively to the opportunity described in the RFP**.
+"""

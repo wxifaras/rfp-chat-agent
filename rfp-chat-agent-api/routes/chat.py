@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from typing import Dict, Any, Optional
 from services.rfp_service import RfpService
 from models.process_rfp_response import ProcessRfpResponse
+from agents.agentIntent import AgentIntent
 import logging
 
 router = APIRouter()
@@ -39,6 +40,17 @@ async def chat_with_rfp(
         logger.error(f"Validation error: {e}")
         return {"error": str(e)}
     return search_response
+
+@router.post("/rfp/capability/chat")
+async def chat_with_rfp( session_id: Annotated[str, Form(...)],
+    user_id: Annotated[str, Form(...)],
+    question: Annotated[str, Form(...)]=None):
+    try:
+        agent=AgentIntent()
+        intent = await agent.classify_intent(question)
+        return intent
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/rfp/upload", response_model=ProcessRfpResponse)
 async def upload_rfp(
