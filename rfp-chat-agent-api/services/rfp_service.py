@@ -261,7 +261,7 @@ class RfpService:
             chunk_tokens = all_tokens[i : i + chunk_size]
             chunk_page_map = page_token_map[i : i + chunk_size]
             chunked_text = enc.decode(chunk_tokens)
-            pages_in_chunk = sorted(set(chunk_page_map))
+            pages_in_chunk = sorted(set(p for p in chunk_page_map if p is not None))
 
             chunks.append({
                 'chunk_tokens': chunk_tokens,
@@ -274,8 +274,9 @@ class RfpService:
             overlap = max(int(chunk_size * 0.15), chunk_overlap)
             step = chunk_size - overlap
 
+            # Check if this will be the last chunk
             if len(all_tokens) - i <= chunk_size:
-                break  # last chunk done
+                break  # Current chunk already captured the end
             i += step
         return chunks
     
