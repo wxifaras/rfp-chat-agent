@@ -245,39 +245,52 @@ class RfpService:
     @staticmethod
     def chunk_text(allContent):
         enc = tiktoken.get_encoding("o200k_base")
-        all_tokens, page_token_map = [], []
-        for page in allContent.pages:
+        pages = allContent.pages
+        page_tokens = []
+        page_numbers = []
+
+        # Precompute tokens for each page
+        for page in pages:
             page_text = " ".join(w['content'] for w in page.get('words', []))
             tokens = enc.encode(page_text)
-            all_tokens.extend(tokens)
-            page_token_map.extend([page.get('pageNumber')] * len(tokens))
+            page_tokens.append(tokens)
+            page_numbers.append(page.get('pageNumber'))
 
         chunks = []
-        i = 0
-        chunk_size = settings.CHUNK_SIZE
-        chunk_overlap = settings.CHUNK_OVERLAP
 
-        while i < len(all_tokens):
-            chunk_tokens = all_tokens[i : i + chunk_size]
-            chunk_page_map = page_token_map[i : i + chunk_size]
-            chunked_text = enc.decode(chunk_tokens)
-            pages_in_chunk = sorted(set(p for p in chunk_page_map if p is not None))
+        for idx, tokens in enumerate(page_tokens):
+            # Get 15% of previous page tokens
+            prev_tokens = []
+            if idx > 0:
+                prev = page_tokens[idx - 1]
+                prev_len = max(1, int(len(prev) * 0.15))
+                prev_tokens = prev[-prev_len:]
+
+            # Get 15% of next page tokens
+            next_tokens = []
+            if idx < len(page_tokens) - 1:
+                nxt = page_tokens[idx + 1]
+                next_len = max(1, int(len(nxt) * 0.15))
+                next_tokens = nxt[:next_len]
+
+            # Combine tokens: prev 15% + current + next 15%
+            combined_tokens = prev_tokens + tokens + next_tokens
+            combined_page_map = (
+                [page_numbers[idx - 1]] * len(prev_tokens) if idx > 0 else []
+            ) + [page_numbers[idx]] * len(tokens) + (
+                [page_numbers[idx + 1]] * len(next_tokens) if idx < len(page_tokens) - 1 else []
+            )
+
+            chunked_text = enc.decode(combined_tokens)
+            pages_in_chunk = sorted(set(p for p in combined_page_map if p is not None))
 
             chunks.append({
-                'chunk_tokens': chunk_tokens,
+                'chunk_tokens': combined_tokens,
                 'chunked_text': chunked_text,
                 'pages': pages_in_chunk,
-                'page_token_map': chunk_page_map
+                'page_token_map': combined_page_map
             })
 
-            # Calculate overlap adaptively (at least your default, but scaled)
-            overlap = max(int(chunk_size * 0.15), chunk_overlap)
-            step = chunk_size - overlap
-
-            # Check if this will be the last chunk
-            if len(all_tokens) - i <= chunk_size:
-                break  # Current chunk already captured the end
-            i += step
         return chunks
     
     async def chat_with_rfp(self, 
