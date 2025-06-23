@@ -222,7 +222,9 @@ class RfpService:
             logger.info(f"SAS URL: {sas_url}")
             time.sleep(5)  # wait for blob propagation (if needed)
 
-            extracted = get_azure_doc_intel_service().extract_text_from_url(sas_url)
+            extractedAll = get_azure_doc_intel_service().extract_text_from_url(sas_url)
+            extracted = extractedAll.content
+
             logger.info(f"Extracted content (first 100 chars): {extracted[:100]}...")
             new_parts.append(extracted)
 
