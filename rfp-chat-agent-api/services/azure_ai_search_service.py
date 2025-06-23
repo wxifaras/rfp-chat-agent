@@ -50,6 +50,7 @@ class SearchResult(BaseModel):
     pursuit_name: str = Field(..., description="Name of the pursuit/RFP")
     source_file: str = Field(..., description="Name of the source file for the chunk")
     reranker_score: float = Field(..., ge=0.0, description="Semantic reranker score")
+    page_number: List[int] = Field(..., description="Page numbers in the source file")
 
 class AzureAISearchService:
     def __init__(self): 
@@ -76,6 +77,10 @@ class AzureAISearchService:
             SimpleField(name="rfp_id", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="pursuit_name", type=SearchFieldDataType.String, filterable=True),
             SimpleField(name="file_name", type=SearchFieldDataType.String, filterable=True),
+            SimpleField(name="page_number", type=SearchFieldDataType.Collection(SearchFieldDataType.Int32),
+            filterable=False,
+            sortable=False,
+            facetable=False),
             SearchableField(name="chunk_content", type=SearchFieldDataType.String, searchable=True, retrievable=True),
             SearchField(
                 name="chunk_content_vector",
@@ -118,20 +123,24 @@ class AzureAISearchService:
         result = self.search_index_client.create_or_update_index(idx)
         return result.name
     
-    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], file_name: str) -> List[str]:
+    def index_rfp_chunks(self, pursuit_name: str, rfp_id: str, chunks: List[str], page_number: List[str], file_name: str) -> List[str]:
         """Embed each chunk and upload to vector index."""
         from services.service_registry import get_azure_openai_service
 
         documents = []
-        for chunk in chunks:
+
+        for idx, chunk in enumerate(chunks):
             embedding = get_azure_openai_service().create_embedding(chunk)
             chunk_id = str(uuid.uuid4())
             logger.info(f"Generated chunk ID: {chunk_id} for pursuit: {pursuit_name} Chunk content: {chunk[:50]}...")
+            page = page_number[idx] if idx < len(page_number) else None
+
             documents.append({
                 "chunk_id": chunk_id,
                 "rfp_id": rfp_id,
                 "pursuit_name": pursuit_name,
                 "file_name": file_name,
+                "page_number": page,
                 "chunk_content": chunk,
                 "chunk_content_vector": embedding  # this must match the Collection(Edm.Single) field
             })
@@ -180,7 +189,7 @@ class AzureAISearchService:
             search_text=search_query,
             vector_queries=[vector_query],
             filter=filter_str,
-            select=["chunk_id", "chunk_content", "pursuit_name", "file_name"],
+            select=["chunk_id", "chunk_content", "pursuit_name", "file_name", "page_number"],
             top=NUM_SEARCH_RESULTS,
             query_type="semantic",
             semantic_configuration_name="semantic-config",
@@ -195,7 +204,8 @@ class AzureAISearchService:
                 source_file=result["file_name"],
                 pursuit_name=result["pursuit_name"],
                 #source_pages=result[""],
-                reranker_score=result["@search.reranker_score"]
+                reranker_score=result["@search.reranker_score"],
+                page_number=result["page_number"],
             )
             search_results.append(search_result)
         return search_results

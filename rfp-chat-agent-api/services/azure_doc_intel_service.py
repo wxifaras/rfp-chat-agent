@@ -17,8 +17,8 @@ class AzureDocIntelService:
 
     def extract_text_from_url(self, url: str):
         poller = self.document_intelligence_client.begin_analyze_document(
-            "prebuilt-read", AnalyzeDocumentRequest(url_source=url)
+            "prebuilt-layout", AnalyzeDocumentRequest(url_source=url)
         )
         
         result = poller.result()
-        return result.content
+        return result
