@@ -161,7 +161,6 @@ class AzureAISearchService:
             self,
             search_query: str,
             processed_ids: Set[str],
-            #category_filter: str | None = None,
             pursuit_name: Optional[str] = None
         ) -> List[SearchResult]:
         """
@@ -175,12 +174,13 @@ class AzureAISearchService:
             k_nearest_neighbors=K_NEAREST_NEIGHBORS,
             fields="chunk_content_vector",
         )
+        
         filter_parts = []
+       
         if processed_ids:
             ids_string = ','.join(processed_ids)
             filter_parts.append(f"not search.in(chunk_id, '{ids_string}')")
-        #if category_filter:
-        #    filter_parts.append(f"({category_filter})")
+
         if pursuit_name:
             filter_parts.append(f"(pursuit_name eq '{pursuit_name}')")
         filter_str = " and ".join(filter_parts) if filter_parts else None
@@ -196,6 +196,7 @@ class AzureAISearchService:
             query_caption="extractive",
             query_answer="extractive"
         )
+
         search_results = []
         for result in results:
             search_result = SearchResult(
@@ -203,7 +204,6 @@ class AzureAISearchService:
                 chunk_content=result["chunk_content"],
                 source_file=result["file_name"],
                 pursuit_name=result["pursuit_name"],
-                #source_pages=result[""],
                 reranker_score=result["@search.reranker_score"],
                 page_number=result["page_number"],
             )
