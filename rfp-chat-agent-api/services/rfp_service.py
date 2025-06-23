@@ -41,8 +41,7 @@ MAX_ATTEMPTS = 3
 class RfpService:
     def __init__(self):
         if not all([
-            settings.CHUNK_SIZE,
-            settings.CHUNK_OVERLAP
+            settings.PAGE_OVERLAP
         ]):
             raise ValueError("Required settings are missing")
 
@@ -257,23 +256,23 @@ class RfpService:
             page_numbers.append(page.get('pageNumber'))
 
         chunks = []
+        
+        page_overlap_percent = float(settings.PAGE_OVERLAP) / 100
 
         for idx, tokens in enumerate(page_tokens):
-            # Get 15% of previous page tokens
+
             prev_tokens = []
             if idx > 0:
                 prev = page_tokens[idx - 1]
-                prev_len = max(1, int(len(prev) * 0.15))
+                prev_len = max(1, int(len(prev) * page_overlap_percent))
                 prev_tokens = prev[-prev_len:]
 
-            # Get 15% of next page tokens
             next_tokens = []
             if idx < len(page_tokens) - 1:
                 nxt = page_tokens[idx + 1]
-                next_len = max(1, int(len(nxt) * 0.15))
+                next_len = max(1, int(len(nxt) * page_overlap_percent))
                 next_tokens = nxt[:next_len]
 
-            # Combine tokens: prev 15% + current + next 15%
             combined_tokens = prev_tokens + tokens + next_tokens
             combined_page_map = (
                 [page_numbers[idx - 1]] * len(prev_tokens) if idx > 0 else []
