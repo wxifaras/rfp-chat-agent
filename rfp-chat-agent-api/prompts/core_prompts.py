@@ -112,6 +112,10 @@ TRIGGER_RESEARCH_PROMPT = """You are an intelligent assistant helping to decide 
   7. Delivery & Operational Readiness
   8. Internal Resource Readiness
   9. Regulatory & Data Sensitivity
+  Also, take into accout below Blob content:
+     <Blob Reference Content>
+                {blob_context}
+      </Blob Reference Content>
 
 - A **Process** means the user is asking about standard procedures, approval flows, internal policies, or how something gets done manually (like submitting forms, requesting access, or initiating workflows).
 

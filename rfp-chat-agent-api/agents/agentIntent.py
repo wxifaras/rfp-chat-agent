@@ -48,10 +48,21 @@ class AgentIntent:
     async def classify_intent(self, user_input: str) -> ConversationResult:
         """Classifies the intent as 'capability' or 'process' using Azure OpenAI."""
 
+        blob_context = ""
+        try:
+                blob_service = BlobServiceClient.from_connection_string(settings.AZURE_STORAGE_CONNECTION_STRING)
+                container_client = blob_service.get_container_client(settings.AZURE_STORAGE_RFP_CONTAINER_NAME)
+                blob_client = container_client.get_blob_client("capabilities/capabilities.txt")
+                stream =  blob_client.download_blob()
+                blob_context = stream.readall().decode("utf-8")
+                logger.info("Blob context loaded successfully.")
+        except Exception as e:
+                logger.warning(f"Failed to load blob context file: {str(e)}")
+        final_prompt = TRIGGER_RESEARCH_PROMPT.format(blob_context=blob_context)
         response = self.client.chat.completions.create(
             model=self.deployment_name,
             messages=[
-                {"role": "system", "content": TRIGGER_RESEARCH_PROMPT},
+                {"role": "system", "content": final_prompt},
                 {"role": "user", "content": user_input}
             ]
         )
